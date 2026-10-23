@@ -6,6 +6,10 @@ GO2RTC=$SCRIPT_DIR/go2rtc
 GO2RTC_CONFIG=$SCRIPT_DIR/go2rtc-k3.yaml
 WATCHDOG_SOURCE=$SCRIPT_DIR/scripts/camera_watchdog.py
 WATCHDOG=$SCRIPT_DIR/camera_watchdog.py
+FLUIDD_COMPAT=$SCRIPT_DIR/scripts/fluidd_k3_compat.py
+FLUIDD_SOURCE=/usr/share/fluidd
+FLUIDD_DIR=$SCRIPT_DIR/fluidd
+NGINX_CONF=/etc/nginx/nginx.conf
 SERVICE=/etc/init.d/go2rtc-k3
 INSTALLED_FILE=$SCRIPT_DIR/.installed
 STREAM_NAME=k3
@@ -45,6 +49,16 @@ require_overlay() {
         echo "The firmware allocates a 512 MiB overlay image on the SD card."
         return 1
     fi
+}
+
+install_fluidd_compat() {
+    [ -f "$FLUIDD_COMPAT" ] || { log_error "Missing $FLUIDD_COMPAT"; return 1; }
+    python3 "$FLUIDD_COMPAT" install \
+        --source "$FLUIDD_SOURCE" \
+        --destination "$FLUIDD_DIR" \
+        --nginx "$NGINX_CONF" || return 1
+    nginx -t || { log_error "Nginx rejected the Fluidd document-root change."; return 1; }
+    /etc/init.d/nginx restart || { log_error "Could not restart Nginx."; return 1; }
 }
 
 get_printer_ip() {
@@ -165,6 +179,7 @@ install_camera() {
     require_k3 || return 1
     require_overlay || return 1
     [ -f "$WATCHDOG_SOURCE" ] || { log_error "Missing $WATCHDOG_SOURCE"; return 1; }
+    install_fluidd_compat || return 1
 
     printer_ip=$(get_printer_ip)
     case "$printer_ip" in

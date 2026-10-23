@@ -2,7 +2,7 @@
 
 The K3 firmware includes a `webrtc_local` camera service and a Fluidd WebRTC adapter for go2rtc. This installer places go2rtc on `/mnt/UDISK`, registers the camera through Moonraker, and runs go2rtc with OpenWrt `procd`.
 
-It does not patch the stock Nginx or Fluidd files. Fluidd connects directly to go2rtc on port `1984`.
+The stock Moonraker webcam API omits Fluidd's `enabled` and `uid` fields, and its delete endpoint expects `name`. The installer copies Fluidd to `/mnt/UDISK/helper-script/fluidd`, applies those compatibility defaults to the JavaScript bundle, and changes the port `4408` Nginx document root to that writable copy. The original firmware files stay untouched. Fluidd's update option also installs updates into this UDISK copy and reapplies the compatibility patch.
 
 ## Requirements
 
@@ -41,4 +41,4 @@ With the overlay mounted, select **K3 Camera Support** in the remove menu, or ru
 sh /mnt/UDISK/helper-script/scripts/camera.sh remove
 ```
 
-This removes the Moonraker camera entry, service, and K3 camera files. It leaves the firmware overlay itself in place.
+This removes the Moonraker camera entry, service, and go2rtc files. The UDISK-hosted Fluidd copy and Nginx document-root change remain, so Fluidd updates and the API compatibility fix are preserved. It leaves the firmware overlay itself in place.

@@ -11,6 +11,11 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 
 FLUIDD_DIR=/usr/share/fluidd
+K3_FLUIDD_COMPAT=$SCRIPT_DIR/scripts/fluidd_k3_compat.py
+K3_BOARD=$(/usr/bin/get_sn_mac.sh board 2>/dev/null)
+case "$K3_BOARD" in
+    CR0CUF039C13*) FLUIDD_DIR=$SCRIPT_DIR/fluidd ;;
+esac
 FLUIDD_URL=https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
 NGINX_CONF=/etc/nginx/nginx.conf
 
@@ -72,8 +77,10 @@ check_download_tool() {
         DOWNLOAD_CMD="wget"
     elif which curl > /dev/null 2>&1; then
         DOWNLOAD_CMD="curl"
+    elif which python3 > /dev/null 2>&1; then
+        DOWNLOAD_CMD="python3"
     else
-        log_error "Neither wget nor curl found. Install Entware first or check your PATH."
+        log_error "No supported downloader found (wget, curl, or python3)."
         return 1
     fi
 }
@@ -83,8 +90,14 @@ download_file() {
     local dest="$2"
     if [ "$DOWNLOAD_CMD" = "wget" ]; then
         wget -q --show-progress -O "$dest" "$url"
-    else
+    elif [ "$DOWNLOAD_CMD" = "curl" ]; then
         curl -L --progress-bar -o "$dest" "$url"
+    else
+        python3 - "$url" "$dest" <<'PY'
+import sys
+import urllib.request
+urllib.request.urlretrieve(sys.argv[1], sys.argv[2])
+PY
     fi
 }
 
@@ -177,6 +190,14 @@ install_fluidd() {
 
     # Ensure nginx block is in place
     restore_fluidd_nginx_block
+
+    if [ "$FLUIDD_DIR" = "$SCRIPT_DIR/fluidd" ]; then
+        python3 "$K3_FLUIDD_COMPAT" install \
+            --source "$FLUIDD_DIR" \
+            --destination "$FLUIDD_DIR" \
+            --nginx "$NGINX_CONF" || return 1
+        nginx -t || return 1
+    fi
 
     # Restart nginx to serve updated files
     restart_nginx
