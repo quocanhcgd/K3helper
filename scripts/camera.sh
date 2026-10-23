@@ -4,6 +4,7 @@
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 GO2RTC=$SCRIPT_DIR/go2rtc
 GO2RTC_CONFIG=$SCRIPT_DIR/go2rtc-k3.yaml
+WATCHDOG_SOURCE=$SCRIPT_DIR/scripts/camera_watchdog.py
 WATCHDOG=$SCRIPT_DIR/camera_watchdog.py
 SERVICE=/etc/init.d/go2rtc-k3
 INSTALLED_FILE=$SCRIPT_DIR/.installed
@@ -163,6 +164,7 @@ install_camera() {
     require_root || return 1
     require_k3 || return 1
     require_overlay || return 1
+    [ -f "$WATCHDOG_SOURCE" ] || { log_error "Missing $WATCHDOG_SOURCE"; return 1; }
 
     printer_ip=$(get_printer_ip)
     case "$printer_ip" in
@@ -182,6 +184,7 @@ PY
         chmod 755 "$GO2RTC" || return 1
     fi
 
+    cp "$WATCHDOG_SOURCE" "$WATCHDOG" || return 1
     write_go2rtc_config "$printer_ip" || return 1
     write_service || return 1
 
