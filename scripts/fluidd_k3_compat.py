@@ -9,9 +9,14 @@ from pathlib import Path
 
 
 OLD_WEBCAM_LIST = "setWebcamsList(r,e){r.webcams=e.webcams||[]}"
-NEW_WEBCAM_LIST = (
+OLD_K3_WEBCAM_LIST = (
     "setWebcamsList(r,e){r.webcams=(e.webcams||[]).map(c=>"
     "({...c,uid:c.uid??c.name,enabled:c.enabled??!0}))}"
+)
+NEW_WEBCAM_LIST = (
+    "setWebcamsList(r,e){r.webcams=(e.webcams||[]).map(c=>"
+    "({...c,uid:c.uid??c.name,enabled:(c.name===\"K3 Camera\"||"
+    "c.service===\"webrtc-go2rtc\")?!0:(c.enabled??!0)}))}"
 )
 OLD_WEBCAM_DELETE = (
     'serverWebcamsDelete(r){ue("server.webcams.delete_item",{params:{uid:r}})}'
@@ -40,13 +45,16 @@ def patch_bundle(root: Path) -> None:
     list_asset, list_text = list_matches[0]
     if OLD_WEBCAM_LIST in list_text:
         list_text = list_text.replace(OLD_WEBCAM_LIST, NEW_WEBCAM_LIST)
-    elif "uid:c.uid??c.name,enabled:c.enabled??!0" not in list_text:
+    elif OLD_K3_WEBCAM_LIST in list_text:
+        list_text = list_text.replace(OLD_K3_WEBCAM_LIST, NEW_WEBCAM_LIST)
+    elif "c.name===\"K3 Camera\"||c.service===\"webrtc-go2rtc\"" not in list_text:
         pattern = re.compile(r"setWebcamsList\((\w+),(\w+)\)\{\1\.webcams=\2\.webcams\|\|\[\]\}")
         list_text, count = pattern.subn(
             lambda match: (
                 f"setWebcamsList({match.group(1)},{match.group(2)})"
                 f"{{{match.group(1)}.webcams=({match.group(2)}.webcams||[]).map(c=>"
-                "({...c,uid:c.uid??c.name,enabled:c.enabled??!0}))}"
+                "({...c,uid:c.uid??c.name,enabled:(c.name===\"K3 Camera\"||"
+                "c.service===\"webrtc-go2rtc\")?!0:(c.enabled??!0)}))}"
             ),
             list_text,
             count=1,
