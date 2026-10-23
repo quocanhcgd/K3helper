@@ -1,0 +1,10 @@
+*.DS_Store
+desktop.ini
+
+# Large firmware and bundled downloads are not part of the source repository.
+/firmware/
+/downloads/
+
+# Python cache files
+__pycache__/
+*.py[cod]

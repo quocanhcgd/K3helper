@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>K3 Direct Camera</title>
+  <style>
+    :root { color-scheme: dark; font: 15px/1.5 system-ui, sans-serif; background: #171b1f; color: #e8edf0; }
+    body { max-width: 960px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 22px; margin: 0 0 16px; }
+    .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+    input, button { box-sizing: border-box; min-height: 40px; border: 1px solid #505a61; border-radius: 4px; padding: 8px 12px; font: inherit; }
+    input { width: 220px; background: #22282d; color: inherit; }
+    button { min-width: 84px; cursor: pointer; background: #287a64; border-color: #287a64; color: white; }
+    button:disabled { cursor: default; opacity: .55; }
+    video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #080a0b; object-fit: contain; }
+    #status { min-height: 24px; margin: 8px 0 16px; color: #aebbc2; }
+    @media (max-width: 540px) { .controls { align-items: stretch; flex-wrap: wrap; } input { flex: 1 1 180px; } }
+  </style>
+</head>
+<body>
+  <h1>K3 Direct Camera</h1>
+  <div class="controls">
+    <label for="host">Printer IP</label>
+    <input id="host" value="192.168.0.158" inputmode="decimal" autocomplete="off">
+    <button id="play" type="button">Connect</button>
+    <button id="stop" type="button" disabled>Stop</button>
+  </div>
+  <div id="status" role="status" aria-live="polite">Ready</div>
+  <video id="video" autoplay playsinline muted controls></video>
+  <script>
+    const hostInput = document.querySelector('#host');
+    const playButton = document.querySelector('#play');
+    const stopButton = document.querySelector('#stop');
+    const status = document.querySelector('#status');
+    const video = document.querySelector('#video');
+    let peer;
+    let requestController;
+    let generation = 0;
+
+    function setStatus(message) {
+      status.textContent = message;
+    }
+
+    function stopPlayback(message = 'Stopped') {
+      generation++;
+      requestController?.abort();
+      requestController = undefined;
+      if (peer) {
+        peer.onicecandidate = null;
+        peer.ontrack = null;
+        peer.close();
+        peer = undefined;
+      }
+      video.srcObject = null;
+      playButton.disabled = false;
+      stopButton.disabled = true;
+      setStatus(message);
+    }
+
+    function decodeBase64Utf8(value) {
+      const bytes = Uint8Array.from(atob(value.trim()), char => char.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    }
+
+    async function connect() {
+      stopPlayback('Connecting...');
+      const current = generation;
+      const host = hostInput.value.trim();
+      if (!/^[a-zA-Z0-9.-]+$/.test(host)) {
+        setStatus('Enter a valid printer IP or hostname.');
+        return;
+      }
+
+      playButton.disabled = true;
+      stopButton.disabled = false;
+      const controller = new AbortController();
+      requestController = controller;
+      peer = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      });
+      const connection = peer;
+      connection.addTransceiver('video', { direction: 'recvonly' });
+      connection.ontrack = event => {
+        if (current !== generation) return;
+        video.srcObject = event.streams[0] || new MediaStream([event.track]);
+        setStatus('Video received');
+      };
+      connection.onconnectionstatechange = () => {
+        if (current === generation) setStatus(`WebRTC: ${connection.connectionState}`);
+      };
+
+      try {
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        await new Promise((resolve, reject) => {
+          if (connection.iceGatheringState === 'complete') return resolve();
+          const timeout = setTimeout(() => reject(new Error('ICE gathering timed out')), 15000);
+          connection.addEventListener('icegatheringstatechange', () => {
+            if (connection.iceGatheringState === 'complete') {
+              clearTimeout(timeout);
+              resolve();
+            }
+          }, { signal: controller.signal });
+        });
+        if (current !== generation) return;
+
+        setStatus('Sending WebRTC offer...');
+        const payload = btoa(unescape(encodeURIComponent(JSON.stringify({
+          type: 'offer',
+          sdp: connection.localDescription.sdp,
+        }))));
+        const response = await fetch(`http://${host}:8000/call/webrtc_local`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'plain/text' },
+          body: payload,
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Camera returned HTTP ${response.status}`);
+        const answer = JSON.parse(decodeBase64Utf8(await response.text()));
+        if (answer.type !== 'answer' || !answer.sdp) {
+          throw new Error(`Unexpected camera response: ${JSON.stringify(answer)}`);
+        }
+        if (current !== generation) return;
+        await connection.setRemoteDescription(answer);
+        setStatus('WebRTC answer received; waiting for video...');
+      } catch (error) {
+        if (error.name === 'AbortError' || current !== generation) return;
+        stopPlayback(`Connection failed: ${error.message}`);
+      }
+    }
+
+    playButton.addEventListener('click', connect);
+    stopButton.addEventListener('click', () => stopPlayback());
+    window.addEventListener('pagehide', () => stopPlayback());
+  </script>
+</body>
+</html>
