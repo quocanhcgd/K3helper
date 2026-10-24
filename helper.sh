@@ -62,6 +62,7 @@ main_menu() {
         echo "    8) Fluidd update/repair (port 4408)"
         echo "   11) K3 Camera (install/repair)"
         echo "   12) K3 Firmware API (port 8765)"
+        echo "   13) Trace Cloud connections (5 min)"
         echo ""
         echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
         echo "   17) Backup Klipper configuration"
@@ -160,6 +161,13 @@ handle_choice() {
                 sh "$SCRIPTS_DIR/firmware_api.sh" install
             else
                 sh "$SCRIPTS_DIR/entware.sh" install
+            fi
+            ;;
+        13)
+            if is_k3; then
+                sh "$SCRIPTS_DIR/cloud_trace.sh"
+            else
+                echo -e "${RED}Invalid choice.${NC}"
             fi
             ;;
         # Step 5 — Remote access

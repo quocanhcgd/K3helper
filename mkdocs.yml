@@ -93,6 +93,7 @@ nav:
       - Helper Script for Creality K2 Plus: helper-script/index.md
       - K3 Compatibility: helper-script/k3-compatibility.md
       - K3 Firmware Version API: helper-script/k3-firmware-api.md
+      - K3 Cloud Connection Trace: helper-script/k3-cloud-trace.md
       - Install Helper Script: helper-script/helper-script-installation.md
       - Install Menu:
           - Install Menu: helper-script/install-menu/index.md
