@@ -130,7 +130,7 @@ main_menu() {
 handle_choice() {
     if is_k3; then
         case "$1" in
-            6|7|9|10|12)
+            2|3|4|5|6|7|9|10|12)
                 echo -e "${RED}This feature is not enabled for K3 because its dependencies are unverified.${NC}"
                 sleep 2
                 main_menu
