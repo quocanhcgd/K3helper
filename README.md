@@ -1,6 +1,6 @@
-# Creality K2 Plus - Helper Script Wiki
+# Creality K2 Plus Helper Script Wiki with experimental K3 support
 
-A complete wiki and helper script for the **Creality K2 Plus** and **K2 Plus Combo (with CFS)**.
+A wiki and helper script for the **Creality K2 Plus** and **K2 Plus Combo (with CFS)**, with limited experimental support for the Creality K3.
 
 Forked and adapted from the excellent [Guilouz Creality Helper Script Wiki](https://github.com/Guilouz/Creality-Helper-Script-Wiki) - rebuilt from the ground up for the K2 Plus architecture.
 
@@ -23,7 +23,7 @@ The K2 Plus has a fundamentally different architecture from the K1 Series:
 - CFS (Color Filament System) multi-material support
 - LIS2DW accelerometer (not ADXL345)
 
-All content has been **verified on live K2 Plus hardware via SSH**.
+K2 Plus features have been verified on live K2 Plus hardware via SSH. K3 support is limited and documented separately; K2 macros and integrations are not assumed to work on K3.
 
 ## Features
 

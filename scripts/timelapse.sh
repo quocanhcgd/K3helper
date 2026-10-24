@@ -7,6 +7,11 @@ TIMELAPSE_DIR=/mnt/UDISK/printer_data/timelapse
 TIMELAPSE_COMPONENT=/usr/share/moonraker/components/timelapse.py
 
 install_timelapse() {
+    if is_k3; then
+        log_error "Moonraker Timelapse is not enabled on K3: its component currently targets read-only /usr/share/moonraker."
+        log_info "A UDISK-based Moonraker component loading method must be verified before installing it."
+        return 1
+    fi
     echo ""
     log_info "Installing Moonraker Timelapse..."
     echo ""

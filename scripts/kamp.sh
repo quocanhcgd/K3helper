@@ -6,6 +6,7 @@ KAMP_DIR=$CONFIG_DIR/KAMP
 KAMP_URL=https://github.com/kyleisah/Klipper-Adaptive-Meshing-Purging/archive/refs/heads/main.zip
 
 install_kamp() {
+    require_k2_only || return 1
     echo ""
     log_info "Installing Klipper Adaptive Meshing & Purging (KAMP)..."
     echo ""

@@ -1,10 +1,13 @@
 #!/bin/sh
-# mainsail.sh - Install, update, repair, or remove Mainsail on port 4409 for K2 Plus
+# mainsail.sh - Install, update, repair, or remove Mainsail on port 4409
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
 
 MAINSAIL_DIR=/usr/share/mainsail
+if is_k3; then
+    MAINSAIL_DIR=$SCRIPT_DIR/mainsail
+fi
 MAINSAIL_URL=https://github.com/mainsail-crew/mainsail/releases/latest/download/mainsail.zip
 NGINX_CONF=/etc/nginx/nginx.conf
 
@@ -40,6 +43,7 @@ check_mainsail_nginx_block() {
 restore_mainsail_nginx_block() {
     if check_mainsail_nginx_block; then
         log_info "Mainsail nginx block (port 4409) already present."
+        configure_mainsail_root || return 1
         return 0
     fi
 
@@ -110,8 +114,62 @@ with open('$NGINX_CONF', 'w') as f:
 print("Mainsail nginx block added on port 4409.")
 PYEOF
 
+    configure_mainsail_root || return 1
     restart_nginx
     log_success "Mainsail nginx block restored on port 4409."
+}
+
+configure_mainsail_root() {
+    is_k3 || return 0
+    backup_nginx_conf
+    python3 - "$NGINX_CONF" "$MAINSAIL_DIR" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+root = sys.argv[2]
+content = path.read_text()
+changed = False
+for match in re.finditer(r"\bserver\s*\{", content):
+    brace = content.find("{", match.start())
+    depth = 0
+    quote = None
+    escaped = False
+    for pos in range(brace, len(content)):
+        char = content[pos]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in "\"'":
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                end = pos + 1
+                break
+    else:
+        continue
+    block = content[match.start():end]
+    if not re.search(r"\blisten\s+4409\b", block):
+        continue
+    block, count = re.subn(r"(?m)^(\s*root\s+)[^;]+;", lambda m: m.group(1) + root + ";", block, count=1)
+    if count != 1:
+        raise SystemExit("Could not find the Mainsail root directive in port 4409 server.")
+    content = content[:match.start()] + block + content[end:]
+    changed = True
+    break
+if not changed:
+    raise SystemExit("Could not find the Nginx server listening on port 4409.")
+path.write_text(content)
+PY
 }
 
 remove_mainsail_nginx_block() {
@@ -165,6 +223,7 @@ status_mainsail() {
 # ── Install / update / repair ─────────────────────────────────────────────────
 
 install_mainsail() {
+    require_k2_only || return 1
     echo ""
 
     # Detect whether this is a fresh install or update/repair
@@ -230,6 +289,7 @@ PYEOF
 # ── Remove ────────────────────────────────────────────────────────────────────
 
 remove_mainsail() {
+    require_k2_only || return 1
     echo ""
     echo -e "${YELLOW}WARNING: This removes Mainsail static files and the port 4409 nginx block.${NC}"
     echo "Fluidd on port 4408 is not affected."

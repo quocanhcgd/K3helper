@@ -4,6 +4,7 @@
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 GO2RTC=$SCRIPT_DIR/go2rtc
 GO2RTC_CONFIG=$SCRIPT_DIR/go2rtc-k3.yaml
+PRINTER_IP_FILE=$SCRIPT_DIR/go2rtc-k3.ip
 WATCHDOG_SOURCE=$SCRIPT_DIR/scripts/camera_watchdog.py
 WATCHDOG=$SCRIPT_DIR/camera_watchdog.py
 FLUIDD_COMPAT=$SCRIPT_DIR/scripts/fluidd_k3_compat.py
@@ -56,7 +57,8 @@ install_fluidd_compat() {
     python3 "$FLUIDD_COMPAT" install \
         --source "$FLUIDD_SOURCE" \
         --destination "$FLUIDD_DIR" \
-        --nginx "$NGINX_CONF" || return 1
+        --nginx "$NGINX_CONF" \
+        --refresh || return 1
     nginx -t || { log_error "Nginx rejected the Fluidd document-root change."; return 1; }
     /etc/init.d/nginx restart || { log_error "Could not restart Nginx."; return 1; }
 }
@@ -76,6 +78,7 @@ mark_removed() {
 
 write_go2rtc_config() {
     printer_ip=$1
+    printf '%s\n' "$printer_ip" > "$PRINTER_IP_FILE"
     cat > "$GO2RTC_CONFIG" <<EOF
 api:
   listen: :1984
@@ -122,22 +125,15 @@ register_camera() {
     python3 - "$printer_ip" "$STREAM_NAME" "$CAMERA_NAME" <<'PY'
 import json
 import sys
-import urllib.error
-import urllib.parse
 import urllib.request
 
 ip, stream, name = sys.argv[1:]
-base = "http://127.0.0.1:7125/server/webcams/item"
-query = urllib.parse.urlencode({"name": name})
-try:
-    urllib.request.urlopen(base + "?" + query, timeout=5).read()
-    delete = urllib.request.Request(base + "?" + query, method="DELETE")
-    urllib.request.urlopen(delete, timeout=5).read()
-except urllib.error.HTTPError as exc:
-    if exc.code != 404:
-        raise
-except Exception:
-    pass
+base = "http://127.0.0.1:7125/server/webcams"
+with urllib.request.urlopen(base + "/list", timeout=5) as response:
+    webcams = json.loads(response.read()).get("result", {}).get("webcams", [])
+if any(camera.get("name") == name for camera in webcams):
+    print("K3 camera is already registered with Moonraker")
+    raise SystemExit(0)
 
 camera = {
     "name": name,
@@ -151,7 +147,7 @@ camera = {
     "rotation": 0,
 }
 request = urllib.request.Request(
-    base,
+    base + "/item",
     data=json.dumps(camera).encode(),
     method="POST",
     headers={"Content-Type": "application/json"},
@@ -247,13 +243,13 @@ PY
         "$SERVICE" disable >/dev/null 2>&1
         rm -f "$SERVICE"
     fi
-    rm -f /etc/rc.d/S98go2rtc-k3 "$GO2RTC" "$GO2RTC_CONFIG" "$WATCHDOG"
+    rm -f /etc/rc.d/S98go2rtc-k3 "$GO2RTC" "$GO2RTC_CONFIG" "$PRINTER_IP_FILE" "$WATCHDOG"
     mark_removed
     log_success "K3 camera support removed."
 }
 
 case "$1" in
-    install) install_camera ;;
+    install|repair|update) install_camera ;;
     remove) remove_camera ;;
-    *) echo "Usage: $0 [install|remove]"; exit 2 ;;
+    *) echo "Usage: $0 [install|repair|update|remove]"; exit 2 ;;
 esac

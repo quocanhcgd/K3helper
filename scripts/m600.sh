@@ -5,6 +5,7 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 M600_CFG=$CONFIG_DIR/m600.cfg
 
 install_m600() {
+    require_k2_only || return 1
     echo ""
     log_info "Installing M600 Support..."
     cat > "$M600_CFG" << 'EOF'

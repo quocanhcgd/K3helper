@@ -1,5 +1,5 @@
 #!/bin/sh
-# fluidd.sh - Install, repair, or remove Fluidd for K2 Plus
+# fluidd.sh - Install, repair, or remove Fluidd for K2 Plus and K3
 #
 # The K2 Plus ships with Fluidd pre-installed at /usr/share/fluidd served on port 4408.
 # This script can:
@@ -12,10 +12,9 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 
 FLUIDD_DIR=/usr/share/fluidd
 K3_FLUIDD_COMPAT=$SCRIPT_DIR/scripts/fluidd_k3_compat.py
-K3_BOARD=$(/usr/bin/get_sn_mac.sh board 2>/dev/null)
-case "$K3_BOARD" in
-    CR0CUF039C13*) FLUIDD_DIR=$SCRIPT_DIR/fluidd ;;
-esac
+if is_k3; then
+    FLUIDD_DIR=$SCRIPT_DIR/fluidd
+fi
 FLUIDD_URL=https://github.com/fluidd-core/fluidd/releases/latest/download/fluidd.zip
 NGINX_CONF=/etc/nginx/nginx.conf
 
@@ -110,6 +109,10 @@ check_fluidd_nginx_block() {
 restore_fluidd_nginx_block() {
     if check_fluidd_nginx_block; then
         log_info "Fluidd nginx block (port 4408) already present."
+        if is_k3; then
+            configure_fluidd_for_k3 || return 1
+            restart_nginx
+        fi
         return 0
     fi
 
@@ -134,7 +137,19 @@ with open('$NGINX_CONF', 'w') as f:
 print("Fluidd nginx block restored on port 4408.")
 PYEOF
 
+    if is_k3; then
+        configure_fluidd_for_k3 || return 1
+        nginx -t || return 1
+    fi
     restart_nginx
+}
+
+configure_fluidd_for_k3() {
+    python3 "$K3_FLUIDD_COMPAT" install \
+        --source /usr/share/fluidd \
+        --destination "$SCRIPT_DIR/fluidd" \
+        --nginx "$NGINX_CONF" || return 1
+    nginx -t
 }
 
 # ── Install / repair Fluidd ───────────────────────────────────────────────────

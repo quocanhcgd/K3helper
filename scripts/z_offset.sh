@@ -5,6 +5,7 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 Z_CFG=$CONFIG_DIR/z_offset_macros.cfg
 
 install_z_offset() {
+    require_k2_only || return 1
     echo ""
     log_info "Installing Save Z-Offset Macros..."
     cat > "$Z_CFG" << 'EOF'

@@ -7,6 +7,7 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 FANS_CFG=$CONFIG_DIR/fans_control.cfg
 
 install_fans() {
+    require_k2_only || return 1
     echo ""
     log_info "Installing Fans Control Macros..."
     echo ""

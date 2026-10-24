@@ -8,6 +8,7 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 MACROS_CFG=$CONFIG_DIR/useful_macros.cfg
 
 install_useful_macros() {
+    require_k2_only || return 1
     echo ""
     log_info "Installing Useful Macros..."
     echo ""

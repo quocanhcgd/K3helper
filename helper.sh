@@ -1,7 +1,7 @@
 #!/bin/sh
-# Creality K2 Plus Helper Script
+# Creality Helper Script
 # https://github.com/sw3defy/Creality-Helper-Script-Wiki-K2-Plus
-# Compatible with: Creality K2 Plus, K2 Plus Combo
+# K3 board support: CR0CUF039C13
 # OS: Tina 5.0 / OpenWrt 21.02
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
@@ -10,6 +10,7 @@ FILES_DIR=$SCRIPT_DIR/files
 PRINTER_DATA=/mnt/UDISK/printer_data
 CONFIG_DIR=$PRINTER_DATA/config
 LOGS_DIR=$PRINTER_DATA/logs
+. "$SCRIPTS_DIR/system.sh"
 
 # Colors
 RED='\033[0;31m'
@@ -23,9 +24,17 @@ print_header() {
     clear
     echo ""
     echo -e "${CYAN}======================================================${NC}"
-    echo -e "${WHITE}   Creality K2 Plus Helper Script${NC}"
+    if is_k3; then
+        echo -e "${WHITE}   Creality K3 Helper Script${NC}"
+    else
+        echo -e "${WHITE}   Creality K2 Plus Helper Script${NC}"
+    fi
     echo -e "${CYAN}======================================================${NC}"
-    echo -e "${YELLOW}   https://sw3defy.github.io/Creality-Helper-Script-Wiki-K2-Plus${NC}"
+    if is_k3; then
+        echo -e "${YELLOW}   K3 support is limited to the features listed below.${NC}"
+    else
+        echo -e "${YELLOW}   https://sw3defy.github.io/Creality-Helper-Script-Wiki-K2-Plus${NC}"
+    fi
     echo -e "${CYAN}======================================================${NC}"
     echo ""
 }
@@ -47,6 +56,33 @@ check_printer() {
 
 main_menu() {
     print_header
+    if is_k3; then
+        echo -e "  ${WHITE}[K3-compatible features]${NC}"
+        echo "    1) Check K3 Moonraker config"
+        echo "    8) Fluidd update/repair (port 4408)"
+        echo "   11) K3 Camera (install/repair)"
+        echo ""
+        echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
+        echo "   17) Backup Klipper configuration"
+        echo "   18) Restore Klipper configuration"
+        echo ""
+        echo -e "  ${WHITE}[Tools] Menu${NC}"
+        echo "   19) Restart Klipper"
+        echo "   20) Restart Moonraker"
+        echo "   21) Restart Nginx"
+        echo "   22) View Klipper log"
+        echo "   23) View Moonraker log"
+        echo "   24) Show installed features"
+        echo ""
+        echo "   16) Remove a feature"
+        echo "    0) Exit"
+        echo ""
+        printf "  Enter choice: "
+        read choice
+        handle_choice "$choice"
+        return
+    fi
+
     echo -e "  ${WHITE}[Install] Menu${NC}"
     echo -e "  ${YELLOW}--- Step 1: Foundation (install first) ---${NC}"
     echo -e "    1) Moonraker Extensions & Update Manager  ${GREEN}[recommended first]${NC}"
@@ -65,13 +101,9 @@ main_menu() {
     echo "    8) Fluidd (install/update/repair — port 4408)"
     echo -e "    9) Mainsail (install/update/repair — port 4409)"
     echo "   10) Moonraker Timelapse"
-    echo "   11) K3 Camera Support (requires firmware overlay)"
     echo ""
     echo -e "  ${YELLOW}--- Step 5: Remote access & notifications ---${NC}"
     echo "   12) Entware"
-    echo "   13) OctoEverywhere"
-    echo "   14) Mobileraker Companion"
-    echo "   15) Git Backup"
     echo ""
     echo -e "  ${WHITE}[Remove] Menu${NC}"
     echo "   16) Remove a feature"
@@ -96,6 +128,16 @@ main_menu() {
 }
 
 handle_choice() {
+    if is_k3; then
+        case "$1" in
+            6|7|9|10|12)
+                echo -e "${RED}This feature is not enabled for K3 because its dependencies are unverified.${NC}"
+                sleep 2
+                main_menu
+                return
+                ;;
+        esac
+    fi
     case "$1" in
         # Step 1 — Foundation
         1)  sh "$SCRIPTS_DIR/moonraker.sh" install ;;
@@ -111,12 +153,9 @@ handle_choice() {
         8)  sh "$SCRIPTS_DIR/fluidd.sh" install ;;
         9)  sh "$SCRIPTS_DIR/mainsail.sh" install ;;
         10) sh "$SCRIPTS_DIR/timelapse.sh" install ;;
-        11) sh "$SCRIPTS_DIR/camera.sh" install ;;
+        11) sh "$SCRIPTS_DIR/camera.sh" repair ;;
         # Step 5 — Remote access
         12) sh "$SCRIPTS_DIR/entware.sh" install ;;
-        13) sh "$SCRIPTS_DIR/octoeverywhere.sh" install ;;
-        14) sh "$SCRIPTS_DIR/mobileraker.sh" install ;;
-        15) sh "$SCRIPTS_DIR/git_backup.sh" install ;;
         # Other menus
         16) remove_menu ;;
         17) sh "$SCRIPTS_DIR/backup.sh" backup ;;
@@ -140,6 +179,22 @@ remove_menu() {
     print_header
     echo -e "  ${WHITE}[Remove] Menu${NC}"
     echo ""
+    if is_k3; then
+        echo "    8) Fluidd"
+        echo "   11) K3 Camera"
+        echo "    0) Back"
+        echo ""
+        printf "  Enter choice: "
+        read choice
+        case "$choice" in
+            8) sh "$SCRIPTS_DIR/fluidd.sh" remove ;;
+            11) sh "$SCRIPTS_DIR/camera.sh" remove ;;
+            0) return ;;
+            *) echo -e "${RED}Invalid choice.${NC}" ;;
+        esac
+        return
+    fi
+
     echo "    1) Moonraker Extensions"
     echo "    2) Fans Control Macros"
     echo "    3) Useful Macros"
@@ -150,11 +205,7 @@ remove_menu() {
     echo "    8) Fluidd"
     echo -e "    9) Mainsail (install/update/repair — port 4409)"
     echo "   10) Moonraker Timelapse"
-    echo "   11) K3 Camera Support"
     echo "   12) Entware"
-    echo "   13) OctoEverywhere"
-    echo "   14) Mobileraker Companion"
-    echo "   15) Git Backup"
     echo "    0) Back"
     echo ""
     printf "  Enter choice: "
@@ -172,9 +223,6 @@ remove_menu() {
         10) sh "$SCRIPTS_DIR/timelapse.sh" remove ;;
         11) sh "$SCRIPTS_DIR/camera.sh" remove ;;
         12) sh "$SCRIPTS_DIR/entware.sh" remove ;;
-        13) sh "$SCRIPTS_DIR/octoeverywhere.sh" remove ;;
-        14) sh "$SCRIPTS_DIR/mobileraker.sh" remove ;;
-        15) sh "$SCRIPTS_DIR/git_backup.sh" remove ;;
         0)  return ;;
         *)  echo -e "${RED}Invalid choice.${NC}" ;;
     esac

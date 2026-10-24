@@ -1,5 +1,5 @@
 #!/bin/sh
-# moonraker.sh - Install/remove Moonraker extensions for K2 Plus
+# moonraker.sh - Install/remove Moonraker extensions for K2/K3
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 . "$SCRIPT_DIR/scripts/system.sh"
@@ -11,6 +11,16 @@ install_moonraker_extensions() {
     echo ""
     log_info "Installing Moonraker Extensions..."
     echo ""
+
+    if is_k3; then
+        if [ ! -f "$MOONRAKER_CONF" ] || ! grep -q 'include /usr/share/moonraker/moonraker.conf' "$MOONRAKER_CONF"; then
+            log_error "Expected the existing K3 Moonraker wrapper and stock-config include at $MOONRAKER_CONF."
+            log_info "No files were changed."
+            return 1
+        fi
+        log_success "K3 Moonraker config wrapper is present; left the firmware startup and config unchanged."
+        return 0
+    fi
 
     # 1. Create our moonraker.conf wrapper in /mnt/UDISK
     if [ ! -f "$MOONRAKER_CONF" ]; then
@@ -34,7 +44,7 @@ EOF
         fi
     fi
 
-    # 2. Patch S56moonraker to point to our config
+    # Patch the K2 startup script to load our wrapper.
     patch_moonraker_startup
 
     # 4. Restart Moonraker
@@ -51,6 +61,11 @@ EOF
 
 remove_moonraker_extensions() {
     echo ""
+    if is_k3; then
+        log_error "Removing this config is disabled on K3 because the firmware uses it for Moonraker startup."
+        log_info "The existing Moonraker config was left unchanged."
+        return 1
+    fi
     log_info "Removing Moonraker Extensions..."
     echo ""
 

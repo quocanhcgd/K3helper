@@ -6,6 +6,7 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 SHAPERS_CFG=$CONFIG_DIR/shapers_calibration.cfg
 
 install_shapers() {
+    require_k2_only || return 1
     echo ""
     log_info "Installing Improved Shapers Calibrations..."
     echo ""

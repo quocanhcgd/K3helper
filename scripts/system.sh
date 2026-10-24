@@ -1,5 +1,5 @@
 #!/bin/sh
-# system.sh - Service management and system utilities for K2 Plus Helper Script
+# system.sh - Shared service and system utilities for K2/K3 Helper Script
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 CONFIG_DIR=/mnt/UDISK/printer_data/config
@@ -16,11 +16,49 @@ log_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 
+get_printer_board() {
+    if [ -x /usr/bin/get_sn_mac.sh ]; then
+        /usr/bin/get_sn_mac.sh board 2>/dev/null
+    fi
+}
+
+is_k3() {
+    board=$(get_printer_board)
+    case "$board" in
+        CR0CUF039C13*) return 0 ;;
+        *) grep -q '^OPENWRT_BOARD=.*CR0CUF039C13' /etc/os-release 2>/dev/null ;;
+    esac
+}
+
+require_k2_only() {
+    if is_k3; then
+        log_error "This feature is not enabled for K3."
+        log_info "Enable it only after its K3 paths, config, and hardware dependencies are verified."
+        return 1
+    fi
+}
+
+restart_service() {
+    service_name=$1
+    shift
+    for service_script in "$@"; do
+        if [ -x "$service_script" ]; then
+            "$service_script" restart
+            return $?
+        fi
+    done
+    log_error "No init script found for $service_name; left the running service untouched."
+    return 1
+}
+
 # ── Service restarts ──────────────────────────────────────────────────────────
 
 restart_klipper() {
     log_info "Restarting Klipper..."
-    /etc/rc.d/S55klipper restart
+    restart_service Klipper \
+        /etc/init.d/klipper \
+        /etc/init.d/S55klipper \
+        /etc/rc.d/S55klipper || return 1
     sleep 3
     if pgrep -f "klippy.py" > /dev/null; then
         log_success "Klipper restarted successfully."
@@ -31,12 +69,10 @@ restart_klipper() {
 
 restart_moonraker() {
     log_info "Restarting Moonraker..."
-    # Kill ALL running moonraker instances (stock + helper script)
-    for pid in $(ps aux | grep moonraker.py | grep -v grep | awk '{print $1}'); do
-        kill "$pid" 2>/dev/null
-    done
-    sleep 2
-    /etc/rc.d/S56moonraker start
+    restart_service Moonraker \
+        /etc/init.d/moonraker \
+        /etc/init.d/S56moonraker \
+        /etc/rc.d/S56moonraker || return 1
     sleep 3
     if pgrep -f "moonraker.py" > /dev/null; then
         log_success "Moonraker restarted successfully."
@@ -47,7 +83,7 @@ restart_moonraker() {
 
 restart_nginx() {
     log_info "Restarting Nginx..."
-    /etc/rc.d/S80nginx restart
+    restart_service Nginx /etc/init.d/nginx /etc/rc.d/S80nginx || return 1
     sleep 2
     if pgrep -f "nginx" > /dev/null; then
         log_success "Nginx restarted successfully."
@@ -58,7 +94,14 @@ restart_nginx() {
 
 restart_camera() {
     log_info "Restarting WebRTC camera service..."
-    /etc/rc.d/S97webrtc restart
+    if is_k3 && [ -x /etc/init.d/go2rtc-k3 ]; then
+        /etc/init.d/go2rtc-k3 restart || return 1
+    else
+        restart_service camera \
+            /etc/init.d/webrtc \
+            /etc/init.d/S97webrtc \
+            /etc/rc.d/S97webrtc || return 1
+    fi
     sleep 2
     log_success "Camera service restarted."
 }
