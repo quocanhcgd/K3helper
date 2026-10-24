@@ -61,6 +61,7 @@ main_menu() {
         echo "    1) Check K3 Moonraker config"
         echo "    8) Fluidd update/repair (port 4408)"
         echo "   11) K3 Camera (install/repair)"
+        echo "   12) K3 Firmware API (port 8765)"
         echo ""
         echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
         echo "   17) Backup Klipper configuration"
@@ -130,7 +131,7 @@ main_menu() {
 handle_choice() {
     if is_k3; then
         case "$1" in
-            2|3|4|5|6|7|9|10|12)
+            2|3|4|5|6|7|9|10)
                 echo -e "${RED}This feature is not enabled for K3 because its dependencies are unverified.${NC}"
                 sleep 2
                 main_menu
@@ -154,8 +155,14 @@ handle_choice() {
         9)  sh "$SCRIPTS_DIR/mainsail.sh" install ;;
         10) sh "$SCRIPTS_DIR/timelapse.sh" install ;;
         11) sh "$SCRIPTS_DIR/camera.sh" repair ;;
+        12)
+            if is_k3; then
+                sh "$SCRIPTS_DIR/firmware_api.sh" install
+            else
+                sh "$SCRIPTS_DIR/entware.sh" install
+            fi
+            ;;
         # Step 5 — Remote access
-        12) sh "$SCRIPTS_DIR/entware.sh" install ;;
         # Other menus
         16) remove_menu ;;
         17) sh "$SCRIPTS_DIR/backup.sh" backup ;;
@@ -182,6 +189,7 @@ remove_menu() {
     if is_k3; then
         echo "    8) Fluidd"
         echo "   11) K3 Camera"
+        echo "   12) K3 Firmware API"
         echo "    0) Back"
         echo ""
         printf "  Enter choice: "
@@ -189,6 +197,7 @@ remove_menu() {
         case "$choice" in
             8) sh "$SCRIPTS_DIR/fluidd.sh" remove ;;
             11) sh "$SCRIPTS_DIR/camera.sh" remove ;;
+            12) sh "$SCRIPTS_DIR/firmware_api.sh" remove ;;
             0) return ;;
             *) echo -e "${RED}Invalid choice.${NC}" ;;
         esac

@@ -2,7 +2,7 @@
 
 The K3 firmware includes a `webrtc_local` camera service and a Fluidd WebRTC adapter for go2rtc. This installer places go2rtc on `/mnt/UDISK`, registers the camera through Moonraker, and runs go2rtc with OpenWrt `procd`.
 
-The stock Moonraker webcam API omits Fluidd's `enabled` and `uid` fields, and its delete endpoint expects `name`. The installer copies Fluidd to `/mnt/UDISK/helper-script/fluidd`, applies those compatibility defaults to the JavaScript bundle, and changes the port `4408` Nginx document root to that writable copy. It also reads `sys_version` from `/mnt/UDISK/creality/userdata/config/system_version.json`, publishes only that version next to Fluidd, and displays it in a small badge. The original firmware files stay untouched. Fluidd updates and camera repairs recreate this integration. The version is available to local clients at `http://<printer-ip>:4408/creality-firmware-version.json`.
+The stock Moonraker webcam API omits Fluidd's `enabled` and `uid` fields, and its delete endpoint expects `name`. The installer copies Fluidd to `/mnt/UDISK/helper-script/fluidd`, applies those compatibility defaults to the JavaScript bundle, and changes the port `4408` Nginx document root to that writable copy. It also reads `sys_version` from `/mnt/UDISK/creality/userdata/config/system_version.json`, publishes only that version next to Fluidd, and displays it in a small badge. The original firmware files stay untouched. Fluidd updates and camera repairs recreate this integration. The version is available to local clients at `http://<printer-ip>:4408/creality-firmware-version.json`. For a dynamic API that returns the current hardware and firmware fields, see [K3 Firmware Version API](k3-firmware-api.md).
 
 ## Requirements
 

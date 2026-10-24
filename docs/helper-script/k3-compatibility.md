@@ -7,6 +7,7 @@ K3 support targets board `CR0CUF039C13` running Tina 5.0 / OpenWrt 21.02. It is 
 - **Moonraker config check** verifies that `/mnt/UDISK/printer_data/config/moonraker.conf` includes `/usr/share/moonraker/moonraker.conf`. It does not patch startup scripts, rewrite the config, or offer removal because the firmware uses this UDISK config at runtime.
 - **Fluidd update/repair** installs a writable copy under `/mnt/UDISK/helper-script/fluidd`, applies the K3 webcam API compatibility patch, displays the Creality `sys_version` from `system_version.json`, and points the port `4408` Nginx server at that copy. The sanitized version is also available at `/creality-firmware-version.json` on port `4408`.
 - **K3 Camera (install/repair)** bridges the firmware camera endpoint on port `8000` through go2rtc on port `1984`. It requires the firmware overlay to be mounted on `/etc` so its procd service can persist. Select the same menu item after firmware updates to refresh the Fluidd patch and service.
+- **K3 Firmware API** serves selected fields from `/mnt/UDISK/creality/userdata/config/system_version.json` at `http://<printer-ip>:8765/api/firmware`. It rereads the file for each request, starts at boot through `procd`, and returns only firmware, app, and hardware version fields. It requires the `/etc` overlay for its persistent service.
 - **Configuration backup and restore** archive `/mnt/UDISK/printer_data/config`.
 - **Service and log tools** use known OpenWrt init-script candidates and report an error if no service script is present.
 
