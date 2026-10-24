@@ -227,7 +227,12 @@ install_fluidd() {
 
     mark_installed "fluidd_updated"
     echo ""
-    log_info "Access Fluidd at: http://$(hostname -I | awk '{print $1}'):4408"
+    FLUIDD_IP=$(get_lan_ip)
+    if [ -n "$FLUIDD_IP" ]; then
+        log_info "Access Fluidd at: http://$FLUIDD_IP:4408"
+    else
+        log_warn "Fluidd is listening on port 4408; could not detect the printer's LAN IP."
+    fi
     echo ""
 }
 

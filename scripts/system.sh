@@ -30,6 +30,27 @@ is_k3() {
     esac
 }
 
+get_lan_ip() {
+    address=$(ip -4 -o addr show scope global 2>/dev/null | awk '{split($4, parts, "/"); if (parts[1] != "" && parts[1] !~ /^127\./) {print parts[1]; exit}}')
+    if [ -n "$address" ]; then
+        echo "$address"
+        return 0
+    fi
+
+    ifconfig 2>/dev/null | awk '
+        /inet addr:/ {
+            sub(/^.*inet addr:/, "")
+            sub(/ .*/, "")
+            if ($0 !~ /^127\./) {print; exit}
+        }
+        $1 == "inet" {
+            address = $2
+            sub(/^addr:/, "", address)
+            if (address !~ /^127\./) {print address; exit}
+        }
+    '
+}
+
 require_k2_only() {
     if is_k3; then
         log_error "This feature is not enabled for K3."

@@ -282,7 +282,12 @@ PYEOF
 
     mark_installed "mainsail"
     echo ""
-    log_info "Access Mainsail at: http://$(hostname -I | awk '{print $1}'):4409"
+    MAINSAIL_IP=$(get_lan_ip)
+    if [ -n "$MAINSAIL_IP" ]; then
+        log_info "Access Mainsail at: http://$MAINSAIL_IP:4409"
+    else
+        log_warn "Mainsail is listening on port 4409; could not detect the printer's LAN IP."
+    fi
     echo ""
 }
 
