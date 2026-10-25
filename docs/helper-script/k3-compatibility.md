@@ -9,6 +9,7 @@ K3 support targets board `CR0CUF039C13` running Tina 5.0 / OpenWrt 21.02. It is 
 - **K3 Camera (install/repair)** bridges the firmware camera endpoint on port `8000` through go2rtc on port `1984`. It requires the firmware overlay to be mounted on `/etc` so its procd service can persist. Select the same menu item after firmware updates to refresh the Fluidd patch and service.
 - **K3 Firmware API** serves selected fields from `/mnt/UDISK/creality/userdata/config/system_version.json` at `http://<printer-ip>:8765/api/firmware`. It rereads the file for each request, starts at boot through `procd`, and returns only firmware, app, and hardware version fields. It requires the `/etc` overlay for its persistent service.
 - **Cloud connection trace** captures printer-originated DNS and TCP/TLS metadata for five minutes and writes one local log under `/mnt/UDISK/helper-script/logs/`. It requires root and kernel packet-socket support, makes no network configuration changes, and stores no packet payload.
+- **K3 Cloud region switch** stages the firmware-supported `Server.COM` or `Server.CN` request on removable USB storage. The touchscreen must confirm the change; the Helper Script does not alter the factory JSON or confirm the switch. See [K3 Cloud Region Switch](k3-cloud-region.md) for verification and cleanup.
 - **Configuration backup and restore** archive `/mnt/UDISK/printer_data/config`.
 - **Service and log tools** use known OpenWrt init-script candidates and report an error if no service script is present.
 

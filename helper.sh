@@ -63,6 +63,7 @@ main_menu() {
         echo "   11) K3 Camera (install/repair)"
         echo "   12) K3 Firmware API (port 8765)"
         echo "   13) Trace Cloud connections (5 min)"
+        echo "   14) K3 Cloud region switch (USB + LCD confirmation)"
         echo ""
         echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
         echo "   17) Backup Klipper configuration"
@@ -166,6 +167,13 @@ handle_choice() {
         13)
             if is_k3; then
                 sh "$SCRIPTS_DIR/cloud_trace.sh"
+            else
+                echo -e "${RED}Invalid choice.${NC}"
+            fi
+            ;;
+        14)
+            if is_k3; then
+                sh "$SCRIPTS_DIR/cloud_region.sh"
             else
                 echo -e "${RED}Invalid choice.${NC}"
             fi
