@@ -101,49 +101,48 @@ def patch_bundle(root: Path) -> None:
         if "serverWebcamsDelete(" in text and "server.webcams.delete_item" in text:
             delete_matches.append((asset, text))
 
-    if len(list_matches) != 1 or len(delete_matches) != 1:
+    if not list_matches or not delete_matches:
         raise RuntimeError(
-            "Expected one Fluidd webcam-list module and one delete API module; "
+            "Expected Fluidd webcam-list and delete API modules; "
             f"found {len(list_matches)} and {len(delete_matches)}."
         )
 
-    list_asset, list_text = list_matches[0]
-    if OLD_WEBCAM_LIST in list_text:
-        list_text = list_text.replace(OLD_WEBCAM_LIST, NEW_WEBCAM_LIST)
-    elif OLD_K3_WEBCAM_LIST in list_text:
-        list_text = list_text.replace(OLD_K3_WEBCAM_LIST, NEW_WEBCAM_LIST)
-    elif "c.name===\"K3 Camera\"||c.service===\"webrtc-go2rtc\"" not in list_text:
-        pattern = re.compile(r"setWebcamsList\((\w+),(\w+)\)\{\1\.webcams=\2\.webcams\|\|\[\]\}")
-        list_text, count = pattern.subn(
-            lambda match: (
-                f"setWebcamsList({match.group(1)},{match.group(2)})"
-                f"{{{match.group(1)}.webcams=({match.group(2)}.webcams||[]).map(c=>"
-                "({...c,uid:c.uid??c.name,enabled:(c.name===\"K3 Camera\"||"
-                "c.service===\"webrtc-go2rtc\")?!0:(c.enabled??!0)}))}"
-            ),
-            list_text,
-            count=1,
-        )
-        if count != 1:
-            raise RuntimeError("Fluidd webcam-list code did not match a supported version.")
-    list_asset.write_text(list_text, encoding="utf-8")
+    for list_asset, list_text in list_matches:
+        if OLD_WEBCAM_LIST in list_text:
+            list_text = list_text.replace(OLD_WEBCAM_LIST, NEW_WEBCAM_LIST)
+        elif OLD_K3_WEBCAM_LIST in list_text:
+            list_text = list_text.replace(OLD_K3_WEBCAM_LIST, NEW_WEBCAM_LIST)
+        elif "c.name===\"K3 Camera\"||c.service===\"webrtc-go2rtc\"" not in list_text:
+            pattern = re.compile(r"setWebcamsList\((\w+),(\w+)\)\{\1\.webcams=\2\.webcams\|\|\[\]\}")
+            list_text, count = pattern.subn(
+                lambda match: (
+                    f"setWebcamsList({match.group(1)},{match.group(2)})"
+                    f"{{{match.group(1)}.webcams=({match.group(2)}.webcams||[]).map(c=>"
+                    "({...c,uid:c.uid??c.name,enabled:(c.name===\"K3 Camera\"||"
+                    "c.service===\"webrtc-go2rtc\")?!0:(c.enabled??!0)}))}"
+                ),
+                list_text,
+                count=1,
+            )
+            if count != 1:
+                raise RuntimeError(f"Fluidd webcam-list code did not match a supported version: {list_asset.name}")
+        list_asset.write_text(list_text, encoding="utf-8")
 
-    delete_asset, delete_text = delete_matches[0]
-    if delete_asset == list_asset:
-        delete_text = list_text
-    if OLD_WEBCAM_DELETE in delete_text:
-        delete_text = delete_text.replace(OLD_WEBCAM_DELETE, NEW_WEBCAM_DELETE)
-    else:
-        start = delete_text.find("serverWebcamsDelete(")
-        end = delete_text.find("serverSensorsList", start)
-        if start < 0 or end < 0:
-            raise RuntimeError("Fluidd webcam-delete code did not match a supported version.")
-        segment = delete_text[start:end]
-        segment, count = re.subn(r"params:\{uid:(\w+)\}", r"params:{name:\1}", segment, count=1)
-        if count != 1 and "params:{name:" not in segment:
-            raise RuntimeError("Fluidd delete call has an unsupported parameter format.")
-        delete_text = delete_text[:start] + segment + delete_text[end:]
-    delete_asset.write_text(delete_text, encoding="utf-8")
+    for delete_asset, _ in delete_matches:
+        delete_text = delete_asset.read_text(encoding="utf-8")
+        if OLD_WEBCAM_DELETE in delete_text:
+            delete_text = delete_text.replace(OLD_WEBCAM_DELETE, NEW_WEBCAM_DELETE)
+        else:
+            start = delete_text.find("serverWebcamsDelete(")
+            end = delete_text.find("serverSensorsList", start)
+            if start < 0 or end < 0:
+                raise RuntimeError(f"Fluidd webcam-delete code did not match a supported version: {delete_asset.name}")
+            segment = delete_text[start:end]
+            segment, count = re.subn(r"params:\{uid:(\w+)\}", r"params:{name:\1}", segment, count=1)
+            if count != 1 and "params:{name:" not in segment:
+                raise RuntimeError(f"Fluidd delete call has an unsupported parameter format: {delete_asset.name}")
+            delete_text = delete_text[:start] + segment + delete_text[end:]
+        delete_asset.write_text(delete_text, encoding="utf-8")
 
 
 def server_blocks(config: str):
