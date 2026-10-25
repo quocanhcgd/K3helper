@@ -220,20 +220,44 @@ install_fluidd() {
         return 1
     fi
 
-    if ! unzip -l /tmp/fluidd.zip > /dev/null 2>&1; then
-        log_error "Downloaded Fluidd archive is invalid."
-        rm -f /tmp/fluidd.zip
-        return 1
-    fi
-
     if which python3 > /dev/null 2>&1; then
-        DOWNLOADED_VER=$(unzip -p /tmp/fluidd.zip release_info.json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null)
+        DOWNLOADED_VER=$(python3 - /tmp/fluidd.zip <<'PY'
+import json
+import sys
+import zipfile
+
+try:
+    with zipfile.ZipFile(sys.argv[1]) as archive:
+        broken = archive.testzip()
+        if broken:
+            raise RuntimeError("CRC check failed for " + broken)
+        info = json.loads(archive.read("release_info.json"))
+        version = info.get("version") if isinstance(info, dict) else None
+        if not version:
+            raise RuntimeError("release_info.json has no version")
+        print(version)
+except Exception as error:
+    print("Fluidd archive validation failed: %s" % error, file=sys.stderr)
+    raise SystemExit(1)
+PY
+        )
+        ZIP_STATUS=$?
+        if [ "$ZIP_STATUS" -ne 0 ]; then
+            log_error "Downloaded Fluidd archive could not be validated; kept at /tmp/fluidd.zip."
+            ls -l /tmp/fluidd.zip 2>/dev/null
+            return 1
+        fi
     else
+        if ! unzip -l /tmp/fluidd.zip > /dev/null 2>&1; then
+            log_error "Downloaded Fluidd archive is invalid; kept at /tmp/fluidd.zip."
+            ls -l /tmp/fluidd.zip 2>/dev/null
+            return 1
+        fi
         DOWNLOADED_VER=$(unzip -p /tmp/fluidd.zip release_info.json 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     fi
     if [ -z "$DOWNLOADED_VER" ]; then
-        log_error "Downloaded archive has no valid release_info.json version."
-        rm -f /tmp/fluidd.zip
+        log_error "Downloaded Fluidd archive has no version; kept at /tmp/fluidd.zip."
+        ls -l /tmp/fluidd.zip 2>/dev/null
         return 1
     fi
     log_info "Downloaded release: $DOWNLOADED_VER"
