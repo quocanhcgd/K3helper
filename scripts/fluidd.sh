@@ -220,7 +220,7 @@ install_fluidd() {
         return 1
     fi
 
-    if ! unzip -t /tmp/fluidd.zip > /dev/null 2>&1; then
+    if ! unzip -l /tmp/fluidd.zip > /dev/null 2>&1; then
         log_error "Downloaded Fluidd archive is invalid."
         rm -f /tmp/fluidd.zip
         return 1
