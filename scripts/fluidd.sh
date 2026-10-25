@@ -100,6 +100,35 @@ PY
     fi
 }
 
+extract_fluidd_archive() {
+    archive=$1
+    destination=$2
+    if which unzip > /dev/null 2>&1; then
+        unzip -q -o "$archive" -d "$destination"
+        return $?
+    fi
+    if which python3 > /dev/null 2>&1; then
+        python3 - "$archive" "$destination" <<'PY'
+import pathlib
+import sys
+import zipfile
+
+archive_path = sys.argv[1]
+destination = pathlib.Path(sys.argv[2]).resolve()
+destination.mkdir(parents=True, exist_ok=True)
+with zipfile.ZipFile(archive_path) as archive:
+    for entry in archive.infolist():
+        target = (destination / entry.filename).resolve()
+        if target != destination and destination not in target.parents:
+            raise RuntimeError("Unsafe path in Fluidd archive: " + entry.filename)
+    archive.extractall(str(destination))
+PY
+        return $?
+    fi
+    log_error "Neither unzip nor python3 is available to extract Fluidd."
+    return 1
+}
+
 fluidd_version() {
     version_dir=$1
     if [ -f "$version_dir/release_info.json" ] && which python3 > /dev/null 2>&1; then
@@ -264,7 +293,7 @@ PY
 
     log_info "Installing Fluidd to $FLUIDD_DIR..."
     mkdir -p "$FLUIDD_DIR"
-    if ! unzip -q -o /tmp/fluidd.zip -d "$FLUIDD_DIR"; then
+    if ! extract_fluidd_archive /tmp/fluidd.zip "$FLUIDD_DIR"; then
         log_error "Could not extract Fluidd archive."
         rm -f /tmp/fluidd.zip
         return 1
