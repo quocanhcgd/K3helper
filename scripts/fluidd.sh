@@ -100,6 +100,28 @@ PY
     fi
 }
 
+fluidd_version() {
+    version_dir=$1
+    if [ -f "$version_dir/release_info.json" ] && which python3 > /dev/null 2>&1; then
+        python3 - "$version_dir/release_info.json" <<'PY'
+import json
+import sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        info = json.load(source)
+    version = info.get("version") if isinstance(info, dict) else None
+    if version:
+        print(version)
+except (OSError, ValueError):
+    pass
+PY
+    elif [ -f "$version_dir/release_info.json" ]; then
+        sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$version_dir/release_info.json"
+    elif [ -f "$version_dir/version" ]; then
+        cat "$version_dir/version"
+    fi
+}
+
 # ── Nginx: check and restore Fluidd block ────────────────────────────────────
 
 check_fluidd_nginx_block() {
@@ -179,13 +201,18 @@ install_fluidd() {
     check_download_tool || return 1
 
     # Get current installed version if present
-    if [ -f "$FLUIDD_DIR/version" ]; then
-        CURRENT_VER=$(cat "$FLUIDD_DIR/version")
+    CURRENT_VER=$(fluidd_version "$FLUIDD_DIR")
+    if [ -n "$CURRENT_VER" ]; then
         log_info "Current version: $CURRENT_VER"
     fi
 
     log_info "Downloading latest Fluidd..."
-    download_file "$FLUIDD_URL" /tmp/fluidd.zip
+    rm -f /tmp/fluidd.zip
+    if ! download_file "$FLUIDD_URL" /tmp/fluidd.zip; then
+        log_error "Download failed. Check your internet connection."
+        rm -f /tmp/fluidd.zip
+        return 1
+    fi
 
     if [ ! -f /tmp/fluidd.zip ] || [ ! -s /tmp/fluidd.zip ]; then
         log_error "Download failed. Check your internet connection."
@@ -193,9 +220,31 @@ install_fluidd() {
         return 1
     fi
 
+    if ! unzip -t /tmp/fluidd.zip > /dev/null 2>&1; then
+        log_error "Downloaded Fluidd archive is invalid."
+        rm -f /tmp/fluidd.zip
+        return 1
+    fi
+
+    if which python3 > /dev/null 2>&1; then
+        DOWNLOADED_VER=$(unzip -p /tmp/fluidd.zip release_info.json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version", ""))' 2>/dev/null)
+    else
+        DOWNLOADED_VER=$(unzip -p /tmp/fluidd.zip release_info.json 2>/dev/null | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    fi
+    if [ -z "$DOWNLOADED_VER" ]; then
+        log_error "Downloaded archive has no valid release_info.json version."
+        rm -f /tmp/fluidd.zip
+        return 1
+    fi
+    log_info "Downloaded release: $DOWNLOADED_VER"
+
     log_info "Installing Fluidd to $FLUIDD_DIR..."
     mkdir -p "$FLUIDD_DIR"
-    unzip -q -o /tmp/fluidd.zip -d "$FLUIDD_DIR"
+    if ! unzip -q -o /tmp/fluidd.zip -d "$FLUIDD_DIR"; then
+        log_error "Could not extract Fluidd archive."
+        rm -f /tmp/fluidd.zip
+        return 1
+    fi
     rm -f /tmp/fluidd.zip
 
     if [ ! -f "$FLUIDD_DIR/index.html" ]; then
@@ -218,8 +267,8 @@ install_fluidd() {
     restart_nginx
 
     # Show installed version
-    if [ -f "$FLUIDD_DIR/version" ]; then
-        NEW_VER=$(cat "$FLUIDD_DIR/version")
+    NEW_VER=$(fluidd_version "$FLUIDD_DIR")
+    if [ -n "$NEW_VER" ]; then
         log_success "Fluidd installed: version $NEW_VER"
     else
         log_success "Fluidd installed successfully."
@@ -270,8 +319,9 @@ status_fluidd() {
     echo "Fluidd status:"
     if [ -f "$FLUIDD_DIR/index.html" ]; then
         log_success "Static files present at $FLUIDD_DIR"
-        if [ -f "$FLUIDD_DIR/version" ]; then
-            echo "  Version: $(cat $FLUIDD_DIR/version)"
+        CURRENT_VER=$(fluidd_version "$FLUIDD_DIR")
+        if [ -n "$CURRENT_VER" ]; then
+            echo "  Version: $CURRENT_VER"
         fi
     else
         log_warn "Static files NOT found at $FLUIDD_DIR"
