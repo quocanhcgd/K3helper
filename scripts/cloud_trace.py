@@ -14,6 +14,43 @@ from pathlib import Path
 def local_ipv4_addresses():
     addresses = set()
     try:
+        result = subprocess.run(
+            ["ip", "-4", "-o", "addr", "show", "scope", "global"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        for line in result.stdout.splitlines():
+            fields = line.split()
+            if "inet" in fields:
+                address = fields[fields.index("inet") + 1].split("/", 1)[0]
+                if not address.startswith("127."):
+                    addresses.add(address)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    if addresses:
+        return addresses
+
+    # A UDP connect selects the routing interface without sending packets.
+    try:
+        route_probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            route_probe.connect(("192.0.2.1", 9))
+            address = route_probe.getsockname()[0]
+            if address and not address.startswith("127."):
+                addresses.add(address)
+        finally:
+            route_probe.close()
+    except OSError:
+        pass
+
+    if addresses:
+        return addresses
+
+    try:
         for name in Path("/sys/class/net").iterdir():
             if name.name == "lo":
                 continue
