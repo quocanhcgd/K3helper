@@ -32,9 +32,7 @@ NEW_FILE_DOWNLOAD = (
     "async downloadFile(e,t){let n=await this.createFileUrlWithToken(e,t);"
     "try{let r=new URL(n);r.origin!==window.location.origin&&"
     "(r=new URL(r.pathname+r.search,window.location.origin)),n=r.toString();"
-    "let a=document.createElement(\"a\");a.href=n;a.setAttribute(\"download\",e);"
-    "a.setAttribute(\"target\",\"_blank\");document.body.appendChild(a);a.click();"
-    "document.body.removeChild(a)}catch{}}"
+    "window.location.assign(n)}catch{}}"
 )
 FIRMWARE_BADGE_ID = "creality-firmware-version-script"
 FIRMWARE_BADGE_SCRIPT = "creality-firmware-version.js"
