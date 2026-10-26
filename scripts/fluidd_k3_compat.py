@@ -39,6 +39,7 @@ FIRMWARE_BADGE_SCRIPT = "creality-firmware-version.js"
 FIRMWARE_INFO_FILE = "creality-firmware-version.json"
 CFS_STATUS_ID = "creality-cfs-status-script"
 CFS_STATUS_SCRIPT = "creality-cfs-status.js"
+ENTRYPOINT_CACHE_QUERY = "k3helper=download2"
 
 FIRMWARE_BADGE_SOURCE = r'''(() => {
   const badgeId = "creality-firmware-version-badge";
@@ -202,6 +203,15 @@ def install_firmware_version_display(root: Path, version_file: Path) -> None:
 
     index = root / "index.html"
     html = index.read_text(encoding="utf-8")
+    entrypoint_pattern = re.compile(
+        r'(?P<prefix>src=["\'](?P<path>(?:\./)?assets/index-[^"\']+\.js))'
+        r'(?:\?[^"\']*)?(?P<quote>["\'])'
+    )
+    html = entrypoint_pattern.sub(
+        lambda match: f'{match.group("prefix")}?{ENTRYPOINT_CACHE_QUERY}{match.group("quote")}',
+        html,
+        count=1,
+    )
     if FIRMWARE_BADGE_ID not in html:
         script_tag = f'<script id="{FIRMWARE_BADGE_ID}" defer src="/{FIRMWARE_BADGE_SCRIPT}"></script>'
         if re.search(r"</body\s*>", html, re.IGNORECASE):
