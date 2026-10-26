@@ -282,6 +282,35 @@ def patch_file_download(text: str) -> tuple[str, bool]:
             )
             return text[:start] + replacement + text[close_brace:], True
         start = text.find(marker, close_brace)
+
+    # Some Fluidd builds contain syntax that makes a full brace scan ambiguous.
+    # The download method is immediately followed by createFileUrl in the bundle,
+    # so that stable boundary is sufficient for a conservative replacement.
+    start = text.find(marker)
+    while start >= 0:
+        open_paren = text.find("(", start + len(marker))
+        close_paren = text.find(")", open_paren + 1)
+        if open_paren < 0 or close_paren < 0:
+            break
+        boundary = re.search(r"}\s*createFileUrl\s*\(", text[close_paren + 1 :])
+        if not boundary:
+            break
+        close_method = close_paren + 1 + boundary.start() + 1
+        segment = text[start:close_method]
+        arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
+        if len(arguments) >= 2 and "createFileUrlWithToken" in segment and "Sm(" in segment:
+            replacement = NEW_FILE_DOWNLOAD.replace(
+                "downloadFile(e,t)",
+                f"downloadFile({text[open_paren + 1 : close_paren]})",
+            ).replace(
+                "createFileUrlWithToken(e,t)",
+                f"createFileUrlWithToken({arguments[0]},{arguments[1]})",
+            ).replace(
+                "Sm(e,n)",
+                f"Sm({arguments[0]},n)",
+            )
+            return text[:start] + replacement + text[close_method:], True
+        start = text.find(marker, close_method)
     return text, False
 
 
