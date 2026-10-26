@@ -212,6 +212,7 @@ def install_firmware_version_display(root: Path, version_file: Path) -> None:
 
     index = root / "index.html"
     html = index.read_text(encoding="utf-8")
+    original_html = html
     entrypoint_pattern = re.compile(
         r'(?P<prefix>src=["\'](?P<path>(?:\./)?assets/index-[^"\']+\.js))'
         r'(?:\?[^"\']*)?(?P<quote>["\'])'
@@ -229,6 +230,7 @@ def install_firmware_version_display(root: Path, version_file: Path) -> None:
             html = re.sub(r"</html\s*>", script_tag + "</html>", html, count=1, flags=re.IGNORECASE)
         else:
             raise RuntimeError("Fluidd index.html has no body or html closing tag for firmware badge injection.")
+    if html != original_html:
         index.write_text(html, encoding="utf-8")
 
 
