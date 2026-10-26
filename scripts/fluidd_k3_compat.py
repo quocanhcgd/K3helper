@@ -31,8 +31,10 @@ OLD_FILE_DOWNLOAD = (
 NEW_FILE_DOWNLOAD = (
     "async downloadFile(e,t){let n=await this.createFileUrlWithToken(e,t);"
     "try{let r=new URL(n);r.origin!==window.location.origin&&"
-    "(r=new URL(r.pathname+r.search,window.location.origin)),n=r.toString()}"
-    "catch{}Sm(e,n)}"
+    "(r=new URL(r.pathname+r.search,window.location.origin)),n=r.toString();"
+    "let a=document.createElement(\"a\");a.href=n;a.setAttribute(\"download\",e);"
+    "a.setAttribute(\"target\",\"_blank\");document.body.appendChild(a);a.click();"
+    "document.body.removeChild(a)}catch{}}"
 )
 FIRMWARE_BADGE_ID = "creality-firmware-version-script"
 FIRMWARE_BADGE_SCRIPT = "creality-firmware-version.js"
@@ -269,13 +271,18 @@ def patch_file_download(text: str) -> tuple[str, bool]:
 
         arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
         body = text[open_brace:close_brace]
-        if len(arguments) >= 2 and "createFileUrlWithToken" in body and "Sm(" in body:
+        if len(arguments) >= 2 and "createFileUrlWithToken" in body and (
+            "Sm(" in body or "createElement(\"a\")" in body or "setAttribute(\"download\"" in body
+        ):
             replacement = NEW_FILE_DOWNLOAD.replace(
                 "downloadFile(e,t)",
                 f"downloadFile({text[open_paren + 1 : close_paren]})",
             ).replace(
                 "createFileUrlWithToken(e,t)",
                 f"createFileUrlWithToken({arguments[0]},{arguments[1]})",
+            ).replace(
+                'setAttribute(\"download\",e)',
+                f'setAttribute(\"download\",{arguments[0]})',
             ).replace(
                 "Sm(e,n)",
                 f"Sm({arguments[0]},n)",
@@ -298,13 +305,18 @@ def patch_file_download(text: str) -> tuple[str, bool]:
         close_method = close_paren + 1 + boundary.start() + 1
         segment = text[start:close_method]
         arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
-        if len(arguments) >= 2 and "createFileUrlWithToken" in segment and "Sm(" in segment:
+        if len(arguments) >= 2 and "createFileUrlWithToken" in segment and (
+            "Sm(" in segment or "createElement(\"a\")" in segment or "setAttribute(\"download\"" in segment
+        ):
             replacement = NEW_FILE_DOWNLOAD.replace(
                 "downloadFile(e,t)",
                 f"downloadFile({text[open_paren + 1 : close_paren]})",
             ).replace(
                 "createFileUrlWithToken(e,t)",
                 f"createFileUrlWithToken({arguments[0]},{arguments[1]})",
+            ).replace(
+                'setAttribute(\"download\",e)',
+                f'setAttribute(\"download\",{arguments[0]})',
             ).replace(
                 "Sm(e,n)",
                 f"Sm({arguments[0]},n)",
