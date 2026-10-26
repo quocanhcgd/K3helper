@@ -32,6 +32,15 @@ NEW_FILE_DOWNLOAD = (
     "async downloadFile(e,t){let n=this.createFileUrl(e,t);"
     "try{let r=new URL(n);r.origin!==window.location.origin&&"
     "(r=new URL(r.pathname+r.search,window.location.origin)),n=r.toString();"
+    "let a=await fetch(n,{credentials:\"same-origin\"});if(!a.ok)throw Error(\"Download failed: \"+a.status);"
+    "let o=URL.createObjectURL(await a.blob()),s=document.createElement(\"a\");"
+    "s.href=o;s.download=e;document.body.appendChild(s);s.click();s.remove();"
+    "setTimeout(()=>URL.revokeObjectURL(o),1000)}catch{}}"
+)
+LEGACY_FILE_DOWNLOAD = (
+    "async downloadFile(e,t){let n=this.createFileUrl(e,t);"
+    "try{let r=new URL(n);r.origin!==window.location.origin&&"
+    "(r=new URL(r.pathname+r.search,window.location.origin)),n=r.toString();"
     "window.location.assign(n)}catch{}}"
 )
 FIRMWARE_BADGE_ID = "creality-firmware-version-script"
@@ -279,7 +288,9 @@ def patch_file_download(text: str) -> tuple[str, bool]:
 
         arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
         body = text[open_brace:close_brace]
-        if len(arguments) >= 2 and "createFileUrlWithToken" in body and (
+        if len(arguments) >= 2 and (
+            "createFileUrlWithToken" in body or "window.location.assign(" in body
+        ) and (
             "Sm(" in body
             or "createElement(\"a\")" in body
             or "setAttribute(\"download\"" in body
@@ -316,7 +327,9 @@ def patch_file_download(text: str) -> tuple[str, bool]:
         close_method = close_paren + 1 + boundary.start() + 1
         segment = text[start:close_method]
         arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
-        if len(arguments) >= 2 and "createFileUrlWithToken" in segment and (
+        if len(arguments) >= 2 and (
+            "createFileUrlWithToken" in segment or "window.location.assign(" in segment
+        ) and (
             "Sm(" in segment
             or "createElement(\"a\")" in segment
             or "setAttribute(\"download\"" in segment
@@ -403,6 +416,8 @@ def patch_bundle(root: Path) -> None:
         download_text = download_asset.read_text(encoding="utf-8")
         if OLD_FILE_DOWNLOAD in download_text:
             download_text = download_text.replace(OLD_FILE_DOWNLOAD, NEW_FILE_DOWNLOAD)
+        elif LEGACY_FILE_DOWNLOAD in download_text:
+            download_text = download_text.replace(LEGACY_FILE_DOWNLOAD, NEW_FILE_DOWNLOAD)
         elif NEW_FILE_DOWNLOAD not in download_text:
             download_text, patched = patch_file_download(download_text)
             if not patched:
