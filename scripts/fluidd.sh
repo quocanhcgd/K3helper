@@ -292,27 +292,44 @@ PY
     log_info "Downloaded release: $DOWNLOADED_VER"
 
     log_info "Installing Fluidd to $FLUIDD_DIR..."
-    mkdir -p "$FLUIDD_DIR"
-    if ! extract_fluidd_archive /tmp/fluidd.zip "$FLUIDD_DIR"; then
+    INSTALL_SOURCE="$FLUIDD_DIR"
+    K3_STAGING_DIR=""
+    if [ "$FLUIDD_DIR" = "$SCRIPT_DIR/fluidd" ]; then
+        # Extract a clean release first. Old hashed assets must not remain after an update.
+        K3_STAGING_DIR="$SCRIPT_DIR/.fluidd-install.$$"
+        rm -rf "$K3_STAGING_DIR"
+        mkdir -p "$K3_STAGING_DIR"
+        INSTALL_SOURCE="$K3_STAGING_DIR"
+    else
+        mkdir -p "$INSTALL_SOURCE"
+    fi
+    if ! extract_fluidd_archive /tmp/fluidd.zip "$INSTALL_SOURCE"; then
         log_error "Could not extract Fluidd archive."
+        [ -n "$K3_STAGING_DIR" ] && rm -rf "$K3_STAGING_DIR"
         rm -f /tmp/fluidd.zip
         return 1
     fi
     rm -f /tmp/fluidd.zip
 
-    if [ ! -f "$FLUIDD_DIR/index.html" ]; then
+    if [ ! -f "$INSTALL_SOURCE/index.html" ]; then
         log_error "Installation failed — index.html not found after extraction."
+        [ -n "$K3_STAGING_DIR" ] && rm -rf "$K3_STAGING_DIR"
         return 1
     fi
 
     # Ensure nginx block is in place
-    restore_fluidd_nginx_block
+    if ! restore_fluidd_nginx_block; then
+        [ -n "$K3_STAGING_DIR" ] && rm -rf "$K3_STAGING_DIR"
+        return 1
+    fi
 
     if [ "$FLUIDD_DIR" = "$SCRIPT_DIR/fluidd" ]; then
         python3 "$K3_FLUIDD_COMPAT" install \
-            --source "$FLUIDD_DIR" \
+            --source "$INSTALL_SOURCE" \
             --destination "$FLUIDD_DIR" \
-            --nginx "$NGINX_CONF" || return 1
+            --nginx "$NGINX_CONF" \
+            --refresh || { rm -rf "$K3_STAGING_DIR"; return 1; }
+        rm -rf "$K3_STAGING_DIR"
         nginx -t || return 1
     fi
 
