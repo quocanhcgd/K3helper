@@ -228,6 +228,63 @@ def install_cfs_status_display(root: Path) -> None:
         index.write_text(html, encoding="utf-8")
 
 
+def patch_file_download(text: str) -> tuple[str, bool]:
+    """Patch Fluidd's minified downloadFile method without relying on bundle formatting."""
+    marker = "async downloadFile"
+    start = text.find(marker)
+    while start >= 0:
+        open_paren = text.find("(", start + len(marker))
+        if open_paren < 0:
+            break
+        close_paren = text.find(")", open_paren + 1)
+        open_brace = text.find("{", close_paren + 1)
+        if close_paren < 0 or open_brace < 0:
+            break
+
+        depth = 0
+        quote = None
+        escaped = False
+        close_brace = -1
+        for position in range(open_brace, len(text)):
+            char = text[position]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in "'\"`":
+                quote = char
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    close_brace = position + 1
+                    break
+        if close_brace < 0:
+            break
+
+        arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
+        body = text[open_brace:close_brace]
+        if len(arguments) >= 2 and "createFileUrlWithToken" in body and "Sm(" in body:
+            replacement = NEW_FILE_DOWNLOAD.replace(
+                "downloadFile(e,t)",
+                f"downloadFile({text[open_paren + 1 : close_paren]})",
+            ).replace(
+                "createFileUrlWithToken(e,t)",
+                f"createFileUrlWithToken({arguments[0]},{arguments[1]})",
+            ).replace(
+                "Sm(e,n)",
+                f"Sm({arguments[0]},n)",
+            )
+            return text[:start] + replacement + text[close_brace:], True
+        start = text.find(marker, close_brace)
+    return text, False
+
+
 def patch_bundle(root: Path) -> None:
     list_matches = []
     delete_matches = []
@@ -292,27 +349,8 @@ def patch_bundle(root: Path) -> None:
         if OLD_FILE_DOWNLOAD in download_text:
             download_text = download_text.replace(OLD_FILE_DOWNLOAD, NEW_FILE_DOWNLOAD)
         elif NEW_FILE_DOWNLOAD not in download_text:
-            pattern = re.compile(r"async\s+downloadFile\(([^)]*)\)\s*\{([^{}]*)\}")
-
-            def replace_download(match: re.Match) -> str:
-                arguments = [item.strip() for item in match.group(1).split(",")]
-                body = match.group(2)
-                if len(arguments) < 2 or "createFileUrlWithToken" not in body or "Sm(" not in body:
-                    return match.group(0)
-                return NEW_FILE_DOWNLOAD.replace(
-                    "downloadFile(e,t)",
-                    f"downloadFile({match.group(1)})",
-                ).replace(
-                    "createFileUrlWithToken(e,t)",
-                    f"createFileUrlWithToken({arguments[0]},{arguments[1]})",
-                ).replace(
-                    "Sm(e,n)",
-                    f"Sm({arguments[0]},n)",
-                )
-
-            original_download_text = download_text
-            download_text, count = pattern.subn(replace_download, download_text, count=0)
-            if count == 0 or download_text == original_download_text:
+            download_text, patched = patch_file_download(download_text)
+            if not patched:
                 raise RuntimeError(
                     f"Fluidd file-download code did not match a supported version: {download_asset.name}"
                 )
