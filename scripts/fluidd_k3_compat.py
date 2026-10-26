@@ -292,12 +292,27 @@ def patch_bundle(root: Path) -> None:
         if OLD_FILE_DOWNLOAD in download_text:
             download_text = download_text.replace(OLD_FILE_DOWNLOAD, NEW_FILE_DOWNLOAD)
         elif NEW_FILE_DOWNLOAD not in download_text:
-            pattern = re.compile(
-                r"async downloadFile\((\w+),(\w+)\)\{"
-                r"Sm\(\1,await this\.createFileUrlWithToken\(\1,\2\)\)\}"
-            )
-            download_text, count = pattern.subn(NEW_FILE_DOWNLOAD, download_text, count=1)
-            if count != 1:
+            pattern = re.compile(r"async\s+downloadFile\(([^)]*)\)\s*\{([^{}]*)\}")
+
+            def replace_download(match: re.Match) -> str:
+                arguments = [item.strip() for item in match.group(1).split(",")]
+                body = match.group(2)
+                if len(arguments) < 2 or "createFileUrlWithToken" not in body or "Sm(" not in body:
+                    return match.group(0)
+                return NEW_FILE_DOWNLOAD.replace(
+                    "downloadFile(e,t)",
+                    f"downloadFile({match.group(1)})",
+                ).replace(
+                    "createFileUrlWithToken(e,t)",
+                    f"createFileUrlWithToken({arguments[0]},{arguments[1]})",
+                ).replace(
+                    "Sm(e,n)",
+                    f"Sm({arguments[0]},n)",
+                )
+
+            original_download_text = download_text
+            download_text, count = pattern.subn(replace_download, download_text, count=0)
+            if count == 0 or download_text == original_download_text:
                 raise RuntimeError(
                     f"Fluidd file-download code did not match a supported version: {download_asset.name}"
                 )
