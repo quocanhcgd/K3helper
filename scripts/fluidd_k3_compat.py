@@ -29,7 +29,7 @@ OLD_FILE_DOWNLOAD = (
     "async downloadFile(e,t){Sm(e,await this.createFileUrlWithToken(e,t))}"
 )
 NEW_FILE_DOWNLOAD = (
-    "async downloadFile(e,t){let n=await this.createFileUrlWithToken(e,t);"
+    "async downloadFile(e,t){let n=this.createFileUrl(e,t);"
     "try{let r=new URL(n);r.origin!==window.location.origin&&"
     "(r=new URL(r.pathname+r.search,window.location.origin)),n=r.toString();"
     "window.location.assign(n)}catch{}}"
@@ -270,7 +270,10 @@ def patch_file_download(text: str) -> tuple[str, bool]:
         arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
         body = text[open_brace:close_brace]
         if len(arguments) >= 2 and "createFileUrlWithToken" in body and (
-            "Sm(" in body or "createElement(\"a\")" in body or "setAttribute(\"download\"" in body
+            "Sm(" in body
+            or "createElement(\"a\")" in body
+            or "setAttribute(\"download\"" in body
+            or "window.location.assign(" in body
         ):
             replacement = NEW_FILE_DOWNLOAD.replace(
                 "downloadFile(e,t)",
@@ -304,7 +307,10 @@ def patch_file_download(text: str) -> tuple[str, bool]:
         segment = text[start:close_method]
         arguments = [item.strip() for item in text[open_paren + 1 : close_paren].split(",")]
         if len(arguments) >= 2 and "createFileUrlWithToken" in segment and (
-            "Sm(" in segment or "createElement(\"a\")" in segment or "setAttribute(\"download\"" in segment
+            "Sm(" in segment
+            or "createElement(\"a\")" in segment
+            or "setAttribute(\"download\"" in segment
+            or "window.location.assign(" in segment
         ):
             replacement = NEW_FILE_DOWNLOAD.replace(
                 "downloadFile(e,t)",
