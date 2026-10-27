@@ -7,6 +7,7 @@
 - Detect Moonraker's active config path from its running process, including the K3 `/mnt/SDCARD/cxsw/printer_data/config` mount.
 - When K3 Moonraker is still using the read-only firmware config, switch its init script to the persistent UDISK wrapper with backups and automatic rollback.
 - Create the persistent wrapper on the writable printer config mount if it does not exist yet.
+- Add a K3 external Spoolman compatibility component for firmware builds that omit upstream `spoolman.py`; it exposes Fluidd's proxy/status/active-spool APIs without claiming extrusion accounting support.
 - Documented that Spoolman runs on a separate host and does not control physical K3 CFS slot selection.
 
 ## K3 Helper Script Self-Update and Fluidd Compatibility — October 27, 2026

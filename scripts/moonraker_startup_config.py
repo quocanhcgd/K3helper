@@ -2,12 +2,15 @@
 """Patch or restore the K3 Moonraker init script's config path."""
 
 import os
+import re
 import shutil
 import sys
 import tempfile
 
 
 STOCK_CONFIG = "/usr/share/moonraker/moonraker.conf"
+HELPER_PYTHONPATH = "/mnt/UDISK/helper-script/scripts"
+PYTHONPATH_LINE = "export PYTHONPATH=%s${PYTHONPATH:+:$PYTHONPATH}" % HELPER_PYTHONPATH
 SERVICE_CANDIDATES = (
     "/etc/init.d/moonraker",
     "/etc/init.d/S56moonraker",
@@ -34,7 +37,7 @@ def find_service(candidates=None):
                 content = source.read()
         except OSError:
             continue
-        if STOCK_CONFIG in content:
+        if STOCK_CONFIG in content or ("moonraker" in content.lower() and re.search(r"(?m)^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=", content)):
             return path, content
     raise RuntimeError("No Moonraker init script references %s" % STOCK_CONFIG)
 
@@ -63,6 +66,18 @@ def patch(config_path, candidates=None):
     if not os.path.exists(backup):
         shutil.copy2(path, backup)
     updated = content.replace(STOCK_CONFIG, config_path)
+    if updated == content:
+        # Some Creality init variants store the path in a differently named
+        # variable while retaining the .conf suffix.
+        updated = re.sub(
+            r"(?m)^(\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*['\"]?)[^'\"\r\n]*moonraker\.conf(['\"]?\s*)$",
+            lambda match: match.group(1) + config_path + match.group(2),
+            content,
+            count=1,
+        )
+    if PYTHONPATH_LINE not in updated:
+        line_end = "\r\n" if "\r\n" in updated else "\n"
+        updated = PYTHONPATH_LINE + line_end + updated
     if updated == content:
         raise RuntimeError("Moonraker startup config path was not changed")
     atomic_write(path, updated, os.stat(path).st_mode & 0o777)

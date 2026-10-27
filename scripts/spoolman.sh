@@ -12,6 +12,9 @@ CONFIG_PATH_HELPER=$SCRIPT_DIR/scripts/moonraker_config_path.py
 STARTUP_HELPER=$SCRIPT_DIR/scripts/moonraker_startup_config.py
 MOONRAKER_STOCK_CONF=/usr/share/moonraker/moonraker.conf
 NEED_STARTUP_PATCH=0
+CUSTOM_COMPONENT=$SCRIPT_DIR/scripts/spoolman_component.py
+CUSTOM_COMPONENT_ENTRY=$SCRIPT_DIR/scripts/spoolman.py
+CUSTOM_SITE=$SCRIPT_DIR/scripts/sitecustomize.py
 
 require_root() {
     [ "$(id -u)" = 0 ] || { log_error "Run this script as root."; return 1; }
@@ -57,10 +60,20 @@ check_k3_config() {
         log_error "Moonraker's active config file was not found: $MOONRAKER_CONF"
         return 1
     fi
+    CUSTOM_COMPONENT_ENABLED=0
     if ! find /usr/share/moonraker -type f -name spoolman.py -print 2>/dev/null | grep -q .; then
-        log_error "This Moonraker firmware does not include its Spoolman component."
-        log_info "No configuration was changed."
-        return 1
+        if [ ! -f "$CUSTOM_COMPONENT" ] || [ ! -f "$CUSTOM_COMPONENT_ENTRY" ] || [ ! -f "$CUSTOM_SITE" ]; then
+            log_error "Moonraker has no Spoolman component and the K3 bridge files are missing."
+            log_info "No configuration was changed."
+            return 1
+        fi
+        log_info "Using the K3 Spoolman compatibility bridge."
+        CUSTOM_COMPONENT_ENABLED=1
+        NEED_STARTUP_PATCH=1
+    fi
+    if [ "$NEED_STARTUP_PATCH" = "1" ]; then
+        [ -f "$STARTUP_HELPER" ] || { log_error "Missing $STARTUP_HELPER"; return 1; }
+        python3 "$STARTUP_HELPER" check >/dev/null || { log_error "Moonraker startup script cannot be safely patched."; return 1; }
     fi
     if [ -L "$MOONRAKER_CONF" ]; then
         log_error "Moonraker config is a symbolic link; refusing to replace it atomically."
@@ -220,6 +233,9 @@ remove_spoolman() {
     [ ! -e "$backup" ] || backup="$backup.$$"
     cp -p "$MOONRAKER_CONF" "$backup" || { log_error "Could not back up Moonraker config."; return 1; }
     python3 "$CONFIG_HELPER" remove "$MOONRAKER_CONF" || return 1
+    if [ -f "$(dirname "$STARTUP_HELPER")/moonraker_startup_config.py" ]; then
+        python3 "$STARTUP_HELPER" restore >/dev/null 2>&1 || true
+    fi
     restart_moonraker
     mark_removed
     log_success "Spoolman disconnected from Moonraker."
