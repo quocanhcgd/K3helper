@@ -52,6 +52,7 @@ FIRMWARE_INFO_FILE = "creality-firmware-version.json"
 CFS_STATUS_ID = "creality-cfs-status-script"
 CFS_STATUS_SCRIPT = "creality-cfs-status.js"
 CFS_STATUS_VERSION = "4"
+K3_THUMBNAIL_PATCH_MARKER = "k3-thumbnail-fallback-v2"
 
 FIRMWARE_BADGE_SOURCE = r'''(() => {
   const badgeId = "creality-firmware-version-badge";
@@ -637,6 +638,8 @@ def patch_bundle(root: Path) -> None:
 
 def patch_thumbnail_getter(text: str) -> tuple[str, bool]:
     """Use K3-extracted sidecar thumbnails when Moonraker metadata lacks them."""
+    if K3_THUMBNAIL_PATCH_MARKER in text:
+        return text, False
     # Match the class method declaration, not the `this.getThumb(...)` call
     # made by getThumbUrl immediately before it.
     marker = re.compile(r"(?<![.$\w])getThumb\(")
@@ -682,6 +685,7 @@ def patch_thumbnail_getter(text: str) -> tuple[str, bool]:
             large_arg = args[3].split("=", 1)[0].strip() if len(args) > 3 else "large"
             date_arg = args[4] if len(args) > 4 else "date"
             replacement = (
+                f"/* {K3_THUMBNAIL_PATCH_MARKER} */"
                 f"getThumb({','.join(args)}){{"
                 f"if({file_arg}.thumbnails?.length){{"
                 f"const thumbs={file_arg}.thumbnails;"
