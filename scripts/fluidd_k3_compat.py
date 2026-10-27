@@ -317,6 +317,10 @@ CFS_STATUS_SOURCE = r'''(() => {
   const unmount = () => {
     const current = document.getElementById(rootId);
     if (current) current.remove();
+    if (pollTimer) {
+      window.clearInterval(pollTimer);
+      pollTimer = null;
+    }
   };
   const syncMount = () => {
     if (findDashboardContainer()) {
