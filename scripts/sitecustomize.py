@@ -32,6 +32,7 @@ try:
     module = importlib.import_module("moonraker.components.file_manager.file_manager")
     file_manager_class = module.FileManager
     original_init = file_manager_class.__init__
+    original_check_reserved_path = file_manager_class.check_reserved_path
 
     if not getattr(original_init, "_k3helper_reserved_path_fix", False):
         package_root = pathlib.Path("/usr/share/moonraker").resolve()
@@ -53,5 +54,24 @@ try:
 
         patched_init._k3helper_reserved_path_fix = True
         file_manager_class.__init__ = patched_init
+
+    if not getattr(original_check_reserved_path, "_k3helper_registered_root_fix", False):
+        def patched_check_reserved_path(self, req_path, need_write, raise_error=True):
+            path = pathlib.Path(req_path).expanduser().resolve()
+            registered = [pathlib.Path(item).resolve() for item in self.file_paths.values()]
+            if any(root == path or root in path.parents for root in registered):
+                for name, (reserved_root, can_read) in self.reserved_paths.items():
+                    if name != "moonraker":
+                        continue
+                    reserved_root = pathlib.Path(reserved_root).resolve()
+                    if reserved_root == path or reserved_root in path.parents:
+                        # Registered Moonraker roots are explicit data folders;
+                        # they must remain accessible even when firmware's
+                        # source path incorrectly contains one of them.
+                        return False
+            return original_check_reserved_path(self, req_path, need_write, raise_error)
+
+        patched_check_reserved_path._k3helper_registered_root_fix = True
+        file_manager_class.check_reserved_path = patched_check_reserved_path
 except Exception:
     logging.exception("K3 Helper could not apply Moonraker file-manager compatibility")
