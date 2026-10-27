@@ -64,6 +64,7 @@ main_menu() {
         echo "   12) K3 Firmware API (port 8765)"
         echo "   13) Trace Cloud connections (5 min)"
         echo "   14) K3 Cloud region switch (USB + LCD confirmation)"
+        echo "   15) Update Helper Script from GitHub"
         echo ""
         echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
         echo "   17) Backup Klipper configuration"
@@ -174,6 +175,13 @@ handle_choice() {
         14)
             if is_k3; then
                 sh "$SCRIPTS_DIR/cloud_region.sh"
+            else
+                echo -e "${RED}Invalid choice.${NC}"
+            fi
+            ;;
+        15)
+            if is_k3; then
+                sh "$SCRIPTS_DIR/update_helper.sh"
             else
                 echo -e "${RED}Invalid choice.${NC}"
             fi

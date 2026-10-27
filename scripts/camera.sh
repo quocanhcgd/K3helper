@@ -54,11 +54,18 @@ require_overlay() {
 
 install_fluidd_compat() {
     [ -f "$FLUIDD_COMPAT" ] || { log_error "Missing $FLUIDD_COMPAT"; return 1; }
-    python3 "$FLUIDD_COMPAT" install \
-        --source "$FLUIDD_SOURCE" \
-        --destination "$FLUIDD_DIR" \
-        --nginx "$NGINX_CONF" \
-        --refresh || return 1
+    if [ -f "$FLUIDD_DIR/index.html" ]; then
+        python3 "$FLUIDD_COMPAT" install \
+            --source "$FLUIDD_DIR" \
+            --destination "$FLUIDD_DIR" \
+            --nginx "$NGINX_CONF" || return 1
+    else
+        python3 "$FLUIDD_COMPAT" install \
+            --source "$FLUIDD_SOURCE" \
+            --destination "$FLUIDD_DIR" \
+            --nginx "$NGINX_CONF" \
+            --refresh || return 1
+    fi
     nginx -t || { log_error "Nginx rejected the Fluidd document-root change."; return 1; }
     /etc/init.d/nginx restart || { log_error "Could not restart Nginx."; return 1; }
 }
