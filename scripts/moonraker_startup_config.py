@@ -60,6 +60,9 @@ def service_paths(candidates=None):
     for candidate in candidates:
         if not os.path.isfile(candidate):
             continue
+        name = os.path.basename(candidate)
+        if ".k3helper-" in name or name.endswith((".bak", ".orig", ".backup")):
+            continue
         path = os.path.realpath(candidate)
         if path not in seen:
             seen.add(path)
