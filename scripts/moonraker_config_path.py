@@ -37,8 +37,6 @@ def resolve_config(proc_root="/proc", candidates=DEFAULT_CANDIDATES):
     active = process_config(proc_root)
     if active:
         active = os.path.abspath(active)
-        if not active.startswith(("/mnt/SDCARD/", "/mnt/UDISK/")):
-            raise RuntimeError("Moonraker uses a non-persistent config path: %s" % active)
         if not os.path.isfile(active):
             raise RuntimeError("Moonraker's configured file does not exist: %s" % active)
         return active
