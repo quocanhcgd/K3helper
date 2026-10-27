@@ -53,6 +53,9 @@ CFS_STATUS_ID = "creality-cfs-status-script"
 CFS_STATUS_SCRIPT = "creality-cfs-status.js"
 CFS_STATUS_VERSION = "4"
 K3_THUMBNAIL_PATCH_MARKER = "k3-thumbnail-fallback-v2"
+REPRINT_THUMBNAILS_ID = "creality-reprint-thumbnails-script"
+REPRINT_THUMBNAILS_SCRIPT = "creality-reprint-thumbnails.js"
+REPRINT_THUMBNAILS_VERSION = "1"
 
 FIRMWARE_BADGE_SOURCE = r'''(() => {
   const badgeId = "creality-firmware-version-badge";
@@ -363,6 +366,45 @@ CFS_STATUS_SOURCE = r'''(() => {
 })();
 '''
 
+REPRINT_THUMBNAILS_SOURCE = r'''(() => {
+  const run = () => {
+    for (const table of document.querySelectorAll("table")) {
+      const headers = [...table.querySelectorAll("thead th")]
+        .map((cell) => cell.textContent.trim().toLowerCase());
+      if (!headers.includes("name") || !headers.includes("status") ||
+          !headers.includes("print duration")) continue;
+
+      for (const row of table.querySelectorAll("tbody tr")) {
+        const cells = row.querySelectorAll("td");
+        const filename = cells[1]?.textContent.trim();
+        if (!filename || !/\.gcode$/i.test(filename) || row.dataset.k3Thumb) continue;
+
+        const stem = filename.replace(/\.gcode$/i, "");
+        const image = document.createElement("img");
+        image.alt = "";
+        image.setAttribute("aria-hidden", "true");
+        image.style.cssText = "display:block;width:54px;height:34px;object-fit:contain";
+        row.dataset.k3Thumb = "loading";
+        image.onload = () => {
+          if (!row.isConnected || cells[1]?.textContent.trim() !== filename) return;
+          cells[0].replaceChildren(image);
+          cells[0].style.verticalAlign = "middle";
+          row.dataset.k3Thumb = "loaded";
+        };
+        image.onerror = () => { row.dataset.k3Thumb = "missing"; };
+        image.src = `/server/files/gcodes/.thumbs/${encodeURIComponent(stem)}-300x300.png`;
+      }
+    }
+  };
+
+  run();
+  if (document.body) {
+    new MutationObserver(run).observe(document.body, { childList: true, subtree: true });
+  }
+  window.addEventListener("hashchange", run);
+})();
+'''
+
 
 def ensure_custom_ui_directory(config_root: Path) -> None:
     """Prepare Fluidd's documented custom UI directory without overwriting user files."""
@@ -439,6 +481,31 @@ def install_cfs_status_display(root: Path) -> None:
             html = re.sub(r"</html\s*>", script_tag + "</html>", html, count=1, flags=re.IGNORECASE)
         else:
             raise RuntimeError("Fluidd index.html has no body or html closing tag for CFS status injection.")
+    index.write_text(html, encoding="utf-8")
+
+
+def install_reprint_thumbnail_display(root: Path) -> None:
+    (root / REPRINT_THUMBNAILS_SCRIPT).write_text(
+        REPRINT_THUMBNAILS_SOURCE, encoding="utf-8"
+    )
+    index = root / "index.html"
+    html = index.read_text(encoding="utf-8")
+    script_tag = (
+        f'<script id="{REPRINT_THUMBNAILS_ID}" defer '
+        f'src="/{REPRINT_THUMBNAILS_SCRIPT}?v={REPRINT_THUMBNAILS_VERSION}"></script>'
+    )
+    existing_pattern = re.compile(
+        rf'<script\s+id=["\']{re.escape(REPRINT_THUMBNAILS_ID)}["\'][^>]*></script>',
+        re.IGNORECASE,
+    )
+    if existing_pattern.search(html):
+        html = existing_pattern.sub(script_tag, html, count=1)
+    elif re.search(r"</body\s*>", html, re.IGNORECASE):
+        html = re.sub(r"</body\s*>", script_tag + "</body>", html, count=1, flags=re.IGNORECASE)
+    elif re.search(r"</html\s*>", html, re.IGNORECASE):
+        html = re.sub(r"</html\s*>", script_tag + "</html>", html, count=1, flags=re.IGNORECASE)
+    else:
+        raise RuntimeError("Fluidd index.html has no body or html closing tag for reprint thumbnails.")
     index.write_text(html, encoding="utf-8")
 
 
@@ -869,6 +936,7 @@ def install(
         patch_bundle(destination)
     install_firmware_version_display(destination, version_file)
     install_cfs_status_display(destination)
+    install_reprint_thumbnail_display(destination)
     ensure_custom_ui_directory(config_root)
     try:
         generated = generate_k3_thumbnail_sidecars()
