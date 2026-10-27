@@ -48,6 +48,7 @@ FIRMWARE_BADGE_SCRIPT = "creality-firmware-version.js"
 FIRMWARE_INFO_FILE = "creality-firmware-version.json"
 CFS_STATUS_ID = "creality-cfs-status-script"
 CFS_STATUS_SCRIPT = "creality-cfs-status.js"
+CFS_STATUS_VERSION = "2"
 
 FIRMWARE_BADGE_SOURCE = r'''(() => {
   const badgeId = "creality-firmware-version-badge";
@@ -273,6 +274,10 @@ CFS_STATUS_SOURCE = r'''(() => {
 
   refreshButton.addEventListener("click", refresh);
   const findDashboardContainer = () => {
+    const path = String(window.location.pathname || "").replace(/\/+$/, "");
+    const hash = String(window.location.hash || "").replace(/\?.*$/, "").replace(/\/+$/, "");
+    if (path && path !== "/") return null;
+    if (hash && hash !== "#" && hash !== "#!") return null;
     const fluiddList = document.querySelector("main .app-draggable.list-group");
     if (fluiddList) return fluiddList;
     return document.querySelector("main");
@@ -350,15 +355,21 @@ def install_cfs_status_display(root: Path) -> None:
     (root / CFS_STATUS_SCRIPT).write_text(CFS_STATUS_SOURCE, encoding="utf-8")
     index = root / "index.html"
     html = index.read_text(encoding="utf-8")
-    if CFS_STATUS_ID not in html:
-        script_tag = f'<script id="{CFS_STATUS_ID}" defer src="/{CFS_STATUS_SCRIPT}"></script>'
+    script_tag = f'<script id="{CFS_STATUS_ID}" defer src="/{CFS_STATUS_SCRIPT}?v={CFS_STATUS_VERSION}"></script>'
+    existing_pattern = re.compile(
+        rf'<script\s+id=["\']{re.escape(CFS_STATUS_ID)}["\'][^>]*></script>',
+        re.IGNORECASE,
+    )
+    if existing_pattern.search(html):
+        html = existing_pattern.sub(script_tag, html, count=1)
+    else:
         if re.search(r"</body\s*>", html, re.IGNORECASE):
             html = re.sub(r"</body\s*>", script_tag + "</body>", html, count=1, flags=re.IGNORECASE)
         elif re.search(r"</html\s*>", html, re.IGNORECASE):
             html = re.sub(r"</html\s*>", script_tag + "</html>", html, count=1, flags=re.IGNORECASE)
         else:
             raise RuntimeError("Fluidd index.html has no body or html closing tag for CFS status injection.")
-        index.write_text(html, encoding="utf-8")
+    index.write_text(html, encoding="utf-8")
 
 
 def patch_file_download(text: str) -> tuple[str, bool]:
