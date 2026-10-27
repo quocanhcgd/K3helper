@@ -9,10 +9,11 @@ import sys
 import types
 
 try:
-    components = importlib.import_module("moonraker.components")
-    component_path = os.path.join(os.path.dirname(__file__), "moonraker", "components")
-    if component_path not in components.__path__:
-        components.__path__.append(component_path)
+    # K3 launches moonraker.py as a script from /usr/share/moonraker, so its
+    # components are top-level imports (components.*), not moonraker.components.
+    moonraker_root = "/usr/share/moonraker"
+    if moonraker_root not in sys.path:
+        sys.path.insert(0, moonraker_root)
 
     # Creality's trimmed loader imports optional modules as components.X
     # rather than moonraker.components.X.
@@ -26,26 +27,33 @@ try:
     if top_component_path not in top_components.__path__:
         top_components.__path__.append(top_component_path)
 
-    # Distro-installed Moonraker may report /usr/share as its source root,
-    # which also contains Klipper's registered docs root. That makes the
-    # file manager reject its own docs directory as a reserved Moonraker path.
-    moonraker = importlib.import_module("moonraker")
+    # Support namespace-package imports too, for Helper Script extensions.
+    try:
+        moonraker_components = importlib.import_module("moonraker.components")
+        namespace_component_path = os.path.join(moonraker_root, "components")
+        if namespace_component_path not in moonraker_components.__path__:
+            moonraker_components.__path__.append(namespace_component_path)
+        helper_namespace_path = os.path.join(
+            os.path.dirname(__file__), "moonraker", "components"
+        )
+        if helper_namespace_path not in moonraker_components.__path__:
+            moonraker_components.__path__.append(helper_namespace_path)
+    except (ImportError, ModuleNotFoundError):
+        moonraker_components = None
 
-    # Upstream Moonraker keeps FileManager in a package, while K3 firmware
-    # has shipped several flattened/trimmed module layouts. Discover the
-    # class instead of depending on one upstream import path.
+    # Moonraker's active FileManager module on K3 is
+    # components.file_manager.file_manager.
     file_manager_class = None
     module_names = [
+        "components.file_manager.file_manager",
+        "components.file_manager",
         "moonraker.components.file_manager.file_manager",
         "moonraker.components.file_manager",
         "moonraker.file_manager",
     ]
-    packages = [moonraker]
-    try:
-        components_package = importlib.import_module("moonraker.components")
-        packages.append(components_package)
-    except (ImportError, ModuleNotFoundError):
-        pass
+    packages = [top_components]
+    if moonraker_components is not None:
+        packages.append(moonraker_components)
     for package in packages:
         candidate = getattr(package, "FileManager", None)
         if candidate is not None and hasattr(candidate, "check_reserved_path"):
