@@ -66,6 +66,9 @@ main_menu() {
         echo "   14) K3 Cloud region switch (USB + LCD confirmation)"
         echo "   15) Update Helper Script from GitHub"
         echo ""
+        echo -e "  ${WHITE}[Fluidd integrations]${NC}"
+        echo "   25) Connect Fluidd to Spoolman"
+        echo ""
         echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
         echo "   17) Backup Klipper configuration"
         echo "   18) Restore Klipper configuration"
@@ -186,6 +189,13 @@ handle_choice() {
                 echo -e "${RED}Invalid choice.${NC}"
             fi
             ;;
+        25)
+            if is_k3; then
+                sh "$SCRIPTS_DIR/spoolman.sh" install
+            else
+                echo -e "${RED}Invalid choice.${NC}"
+            fi
+            ;;
         # Step 5 — Remote access
         # Other menus
         16) remove_menu ;;
@@ -214,6 +224,7 @@ remove_menu() {
         echo "    8) Fluidd"
         echo "   11) K3 Camera"
         echo "   12) K3 Firmware API"
+        echo "   13) Spoolman connection"
         echo "    0) Back"
         echo ""
         printf "  Enter choice: "
@@ -222,6 +233,7 @@ remove_menu() {
             8) sh "$SCRIPTS_DIR/fluidd.sh" remove ;;
             11) sh "$SCRIPTS_DIR/camera.sh" remove ;;
             12) sh "$SCRIPTS_DIR/firmware_api.sh" remove ;;
+            13) sh "$SCRIPTS_DIR/spoolman.sh" remove ;;
             0) return ;;
             *) echo -e "${RED}Invalid choice.${NC}" ;;
         esac

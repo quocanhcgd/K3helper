@@ -1,5 +1,11 @@
 # Changelog
 
+## K3 Spoolman Integration — October 27, 2026
+
+### Added
+- Added a K3 Helper Script action to connect Moonraker and Fluidd to an existing LAN Spoolman server. It validates the Spoolman API, backs up the writable config, verifies Moonraker loaded the component, and restores the prior config if loading fails.
+- Documented that Spoolman runs on a separate host and does not control physical K3 CFS slot selection.
+
 ## K3 Helper Script Self-Update and Fluidd Compatibility — October 27, 2026
 
 ### Added
