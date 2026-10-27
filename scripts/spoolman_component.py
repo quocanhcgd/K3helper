@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import pathlib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +23,7 @@ from moonraker.common import RequestType
 class SpoolmanBridge:
     def __init__(self, config):
         self.server = config.get_server()
+        self._narrow_moonraker_reserved_path()
         raw_url = str(config.get("server")).rstrip("/")
         if not raw_url.startswith(("http://", "https://")):
             raw_url = "http://" + raw_url
@@ -30,6 +33,28 @@ class SpoolmanBridge:
         register_remote = getattr(self.server, "register_remote_method", None)
         if register_remote is not None:
             register_remote("spoolman_set_active_spool", self.set_active_spool)
+
+    def _narrow_moonraker_reserved_path(self):
+        """Avoid reserving sibling Klipper docs with a distro install path."""
+        try:
+            import moonraker
+
+            package_root = pathlib.Path(moonraker.__file__).resolve().parent
+            file_manager = self.server.lookup_component("file_manager")
+            reserved = file_manager.reserved_paths.get("moonraker")
+            if reserved is None:
+                return
+            reserved_root, can_read = reserved
+            reserved_root = pathlib.Path(reserved_root).resolve()
+            if package_root != reserved_root and reserved_root in package_root.parents:
+                file_manager.reserved_paths["moonraker"] = (package_root, can_read)
+                logging.info(
+                    "K3 Spoolman bridge narrowed Moonraker's reserved path from %s to %s",
+                    reserved_root,
+                    package_root,
+                )
+        except Exception:
+            logging.exception("K3 Spoolman bridge could not adjust Moonraker's reserved path")
 
     def _register_endpoints(self):
         self.server.register_endpoint(
