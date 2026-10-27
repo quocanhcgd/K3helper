@@ -40,6 +40,15 @@ NEW_FILE_DOWNLOAD = (
     "s.href=o;s.download=e;document.body.appendChild(s);s.click();s.remove();"
     "setTimeout(()=>URL.revokeObjectURL(o),1000)}catch{}}"
 )
+K3_FILE_API_ORIGIN_MARKER = "k3-file-api-origin-v1"
+K3_FILE_API_ORIGIN_METHOD = (
+    "createFileUrl(e,t,n){/* k3-file-api-origin-v1 */"
+    "let r=(t?`${t}/${e}`:`${e}`).replace(/[^/]+/g,e=>encodeURIComponent(e));"
+    "let a=this.apiUrl;try{let o=new URL(a,window.location.origin);"
+    "if([\"127.0.0.1\",\"localhost\",\"0.0.0.0\"].includes(o.hostname))"
+    "a=window.location.origin}catch{}"
+    "return`${a}/server/files/${r}?date=${n||Date.now()}`}"
+)
 LEGACY_FILE_DOWNLOAD = (
     "async downloadFile(e,t){let n=this.createFileUrl(e,t);"
     "try{let r=new URL(n);r.origin!==window.location.origin&&"
@@ -618,11 +627,66 @@ def patch_file_download(text: str) -> tuple[str, bool]:
     return text, False
 
 
+def patch_file_api_origin(text: str) -> tuple[str, bool]:
+    """Use Fluidd's origin when K3 advertises Moonraker as loopback.
+
+    K3's websocket endpoint is reachable through nginx, but its Fluidd build
+    reports ``http://127.0.0.1:7125`` as ``apiUrl``.  A browser on another
+    computer consequently sends editor/download requests to itself.
+    """
+    if K3_FILE_API_ORIGIN_MARKER in text:
+        return text, False
+
+    marker = re.compile(r"(?<![.$\w])createFileUrl\((\w+),(\w+),(\w+)\)\{")
+    match = marker.search(text)
+    if not match:
+        return text, False
+    start = match.start()
+    open_brace = match.end() - 1
+    depth = 0
+    quote = None
+    escaped = False
+    close_brace = -1
+    for position in range(open_brace, len(text)):
+        char = text[position]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in "'\"`":
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                close_brace = position + 1
+                break
+    if close_brace < 0:
+        return text, False
+
+    method = K3_FILE_API_ORIGIN_METHOD.replace(
+        "createFileUrl(e,t,n)",
+        f"createFileUrl({match.group(1)},{match.group(2)},{match.group(3)})",
+    ).replace(
+        "`${t}/${e}`",
+        "`${" + match.group(2) + "}/${" + match.group(1) + "}`",
+    )
+    # The replacement above keeps the generated method independent of the
+    # minifier's local variable names while retaining its original behavior.
+    return text[:start] + method + text[close_brace:], True
+
+
 def patch_bundle(root: Path) -> None:
     list_matches = []
     delete_matches = []
     download_matches = []
     thumbnail_matches = []
+    file_api_matches = []
     for asset in (root / "assets").glob("*.js"):
         text = asset.read_text(encoding="utf-8")
         if "setWebcamsList(" in text:
@@ -633,6 +697,8 @@ def patch_bundle(root: Path) -> None:
             download_matches.append((asset, text))
         if "getThumb(" in text and "relative_path" in text:
             thumbnail_matches.append((asset, text))
+        if re.search(r"(?<![.$\w])createFileUrl\(\w+,\w+,\w+\)\{", text) and "/server/files/" in text:
+            file_api_matches.append((asset, text))
 
     if not list_matches or not delete_matches:
         raise RuntimeError(
@@ -679,6 +745,18 @@ def patch_bundle(root: Path) -> None:
 
     if not download_matches:
         raise RuntimeError("Could not find Fluidd file-download module.")
+
+    if not file_api_matches:
+        raise RuntimeError("Could not find Fluidd file API URL module.")
+
+    for file_api_asset, _ in file_api_matches:
+        file_api_text = file_api_asset.read_text(encoding="utf-8")
+        file_api_text, _ = patch_file_api_origin(file_api_text)
+        if K3_FILE_API_ORIGIN_MARKER not in file_api_text:
+            raise RuntimeError(
+                f"Fluidd file API URL code did not match a supported version: {file_api_asset.name}"
+            )
+        file_api_asset.write_text(file_api_text, encoding="utf-8")
 
     for download_asset, _ in download_matches:
         download_text = download_asset.read_text(encoding="utf-8")
