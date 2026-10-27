@@ -111,6 +111,8 @@ import urllib.parse
 import urllib.request
 
 raw = sys.argv[1].strip()
+if "://" not in raw:
+    raw = "http://" + raw
 parsed = urllib.parse.urlsplit(raw)
 if any(character.isspace() for character in raw):
     raise SystemExit("The Spoolman URL cannot contain whitespace")

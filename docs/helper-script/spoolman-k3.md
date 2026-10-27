@@ -12,7 +12,7 @@ Confirm that this URL opens from a browser on the LAN, replacing the address wit
 http://192.168.0.20:7912/api/v1/info
 ```
 
-It should return JSON. Use the base URL, without `/api/v1/info`, in the Helper Script.
+It should return JSON. Use the base URL, without `/api/v1/info`, in the Helper Script. Both `192.168.0.43:7912` and `http://192.168.0.43:7912` are accepted; the first form is automatically treated as HTTP.
 
 ## Connect the printer
 
