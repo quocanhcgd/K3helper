@@ -637,8 +637,11 @@ def patch_bundle(root: Path) -> None:
 
 def patch_thumbnail_getter(text: str) -> tuple[str, bool]:
     """Use K3-extracted sidecar thumbnails when Moonraker metadata lacks them."""
-    marker = "getThumb("
-    start = text.find(marker)
+    # Match the class method declaration, not the `this.getThumb(...)` call
+    # made by getThumbUrl immediately before it.
+    marker = re.compile(r"(?<![.$\w])getThumb\(")
+    match = marker.search(text)
+    start = match.start() if match else -1
     while start >= 0:
         open_paren = start + len("getThumb")
         close_paren = text.find(")", open_paren + 1)
@@ -695,7 +698,8 @@ def patch_thumbnail_getter(text: str) -> tuple[str, bool]:
                 "}"
             )
             return text[:start] + replacement + text[close_brace:], True
-        start = text.find(marker, close_brace)
+        match = marker.search(text, close_brace)
+        start = match.start() if match else -1
     return text, False
 
 
