@@ -4,6 +4,7 @@ import importlib
 import logging
 import os
 import pathlib
+import pkgutil
 import sys
 import types
 
@@ -31,19 +32,59 @@ try:
     moonraker = importlib.import_module("moonraker")
 
     # Upstream Moonraker keeps FileManager in a package, while K3 firmware
-    # has shipped both the package and a flattened module over time.
+    # has shipped several flattened/trimmed module layouts. Discover the
+    # class instead of depending on one upstream import path.
     file_manager_class = None
-    for module_name in (
+    module_names = [
         "moonraker.components.file_manager.file_manager",
         "moonraker.components.file_manager",
-    ):
+        "moonraker.file_manager",
+    ]
+    packages = [moonraker]
+    try:
+        packages.append(importlib.import_module("moonraker.components"))
+    except (ImportError, ModuleNotFoundError):
+        pass
+    for package in packages:
+        package_path = getattr(package, "__path__", ())
+        try:
+            package_modules = list(pkgutil.walk_packages(package_path, package.__name__ + "."))
+        except Exception:
+            package_modules = []
+        for item in package_modules:
+            if item.name not in module_names and "file" not in item.name.lower():
+                continue
+            module_names.append(item.name)
+        for package_dir in package_path:
+            try:
+                package_root = pathlib.Path(package_dir).resolve()
+                for source_path in package_root.rglob("*.py"):
+                    try:
+                        source = source_path.read_text(encoding="utf-8", errors="ignore")
+                    except OSError:
+                        continue
+                    if "class FileManager" not in source:
+                        continue
+                    relative = source_path.relative_to(package_root.parent)
+                    parts = list(relative.parts)
+                    if parts[-1] == "__init__.py":
+                        parts.pop()
+                    else:
+                        parts[-1] = pathlib.Path(parts[-1]).stem
+                    discovered = ".".join(parts)
+                    if discovered and discovered not in module_names:
+                        module_names.append(discovered)
+            except (OSError, ValueError):
+                continue
+    for module_name in module_names:
         try:
             module = importlib.import_module(module_name)
-        except ModuleNotFoundError:
+        except (ImportError, ModuleNotFoundError, AttributeError):
             continue
         candidate = getattr(module, "FileManager", None)
-        if candidate is not None:
+        if candidate is not None and hasattr(candidate, "check_reserved_path"):
             file_manager_class = candidate
+            logging.info("K3 Helper found Moonraker FileManager in %s", module_name)
             break
     if file_manager_class is None:
         raise ImportError("Moonraker FileManager class was not found")
