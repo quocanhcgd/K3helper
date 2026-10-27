@@ -695,7 +695,7 @@ def patch_thumbnail_getter(text: str) -> tuple[str, bool]:
                 f"return{{...thumb,url:this.createFileUrl(thumb.relative_path,filepath,{date_arg})}}"
                 "}"
                 "}"
-                f"if({file_arg}.type!==\"file\"||{file_arg}.extension!==\".gcode\")return;"
+                f"if(!/\\.gcode$/i.test({file_arg}.filename||\"\"))return;"
                 f"const filepath={path_arg}?`${{{root_arg}}}/${{{path_arg}}}`:{root_arg};"
                 f"const relativePath=`.thumbs/${{{file_arg}.filename.replace(/\\.gcode$/i,\"\")}}-300x300.png`;"
                 f"return{{width:300,height:300,size:0,relative_path:relativePath,url:this.createFileUrl(relativePath,filepath,{date_arg})}}"
