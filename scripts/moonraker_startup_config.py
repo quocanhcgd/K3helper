@@ -42,6 +42,21 @@ def find_service(candidates=None):
     raise RuntimeError("No Moonraker init script references %s" % STOCK_CONFIG)
 
 
+def find_services(candidates=None):
+    found = []
+    for path in service_paths(candidates):
+        try:
+            with open(path, "r", encoding="utf-8", errors="replace", newline="") as source:
+                content = source.read()
+        except OSError:
+            continue
+        if STOCK_CONFIG in content or ("moonraker" in content.lower() and re.search(r"(?m)^\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=", content)):
+            found.append((path, content))
+    if not found:
+        raise RuntimeError("No Moonraker init script references %s" % STOCK_CONFIG)
+    return found
+
+
 def atomic_write(path, data, mode):
     directory = os.path.dirname(path)
     fd, temporary = tempfile.mkstemp(prefix=".moonraker-config-", dir=directory)
@@ -84,6 +99,30 @@ def patch(config_path, candidates=None):
     return path
 
 
+def patch_all(config_path, candidates=None):
+    patched = []
+    for path, content in find_services(candidates):
+        backup = path + ".k3helper-spoolman.bak"
+        if not os.path.exists(backup):
+            shutil.copy2(path, backup)
+        updated = content.replace(STOCK_CONFIG, config_path)
+        if updated == content:
+            updated = re.sub(
+                r"(?m)^(\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*['\"]?)[^'\"\r\n]*moonraker\.conf(['\"]?\s*)$",
+                lambda match: match.group(1) + config_path + match.group(2),
+                content,
+                count=1,
+            )
+        if PYTHONPATH_LINE not in updated:
+            line_end = "\r\n" if "\r\n" in updated else "\n"
+            updated = PYTHONPATH_LINE + line_end + updated
+        if updated == content:
+            raise RuntimeError("Moonraker startup config path was not changed in %s" % path)
+        atomic_write(path, updated, os.stat(path).st_mode & 0o777)
+        patched.append(path)
+    return patched
+
+
 def restore(candidates=None):
     for path in service_paths(candidates):
         backup = path + ".k3helper-spoolman.bak"
@@ -97,15 +136,31 @@ def restore(candidates=None):
     raise RuntimeError("No saved Moonraker init script backup was found")
 
 
+def restore_all(candidates=None):
+    restored = []
+    for path in service_paths(candidates):
+        backup = path + ".k3helper-spoolman.bak"
+        if not os.path.isfile(backup):
+            continue
+        with open(backup, "r", encoding="utf-8", errors="replace", newline="") as source:
+            original = source.read()
+        atomic_write(path, original, os.stat(path).st_mode & 0o777)
+        os.unlink(backup)
+        restored.append(path)
+    if not restored:
+        raise RuntimeError("No saved Moonraker init script backup was found")
+    return restored
+
+
 def main():
     try:
         if len(sys.argv) == 2 and sys.argv[1] == "check":
             path, _ = find_service()
             print(path)
         elif len(sys.argv) == 3 and sys.argv[1] == "patch":
-            print(patch(sys.argv[2]))
+            print("\n".join(patch_all(sys.argv[2])))
         elif len(sys.argv) == 2 and sys.argv[1] == "restore":
-            print(restore())
+            print("\n".join(restore_all()))
         else:
             print("Usage: %s [check|patch CONFIG|restore]" % sys.argv[0], file=sys.stderr)
             return 2

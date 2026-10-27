@@ -63,11 +63,7 @@ def persistent_wrapper_path(candidates=DEFAULT_CANDIDATES, directories=PERSISTEN
         except OSError:
             continue
     for directory in directories:
-        if (
-            os.path.isdir(directory)
-            and os.path.isfile(os.path.join(directory, "printer.cfg"))
-            and os.access(directory, os.W_OK)
-        ):
+        if os.path.isdir(directory) and os.access(directory, os.W_OK):
             return os.path.join(directory, "moonraker.conf")
     raise RuntimeError("No writable Moonraker config directory found on UDISK mounts")
 

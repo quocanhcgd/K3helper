@@ -68,6 +68,7 @@ main_menu() {
         echo ""
         echo -e "  ${WHITE}[Fluidd integrations]${NC}"
         echo "   25) Connect Fluidd to Spoolman"
+        echo "   26) Diagnose Spoolman integration"
         echo ""
         echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
         echo "   17) Backup Klipper configuration"
@@ -192,6 +193,13 @@ handle_choice() {
         25)
             if is_k3; then
                 sh "$SCRIPTS_DIR/spoolman.sh" install
+            else
+                echo -e "${RED}Invalid choice.${NC}"
+            fi
+            ;;
+        26)
+            if is_k3; then
+                sh "$SCRIPTS_DIR/spoolman.sh" status
             else
                 echo -e "${RED}Invalid choice.${NC}"
             fi

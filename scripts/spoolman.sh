@@ -149,6 +149,34 @@ if "spoolman" not in info.get("components", []):
 PY
 }
 
+diagnose_spoolman() {
+    echo "[INFO] Moonraker component/config status:"
+    python3 - <<'PY'
+import json
+import urllib.error
+import urllib.request
+
+def get(path):
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:7125" + path, timeout=5) as response:
+            return response.status, response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as error:
+        return error.code, error.read().decode("utf-8", "replace")
+    except Exception as error:
+        return "ERROR", str(error)
+
+for path in ("/server/info", "/server/config", "/server/spoolman/status", "/server/spoolman/spool_id"):
+    status, body = get(path)
+    print("%s [%s] %s" % (path, status, body[:1200]))
+PY
+    echo "[INFO] Recent Moonraker Spoolman/import log lines:"
+    for log in /mnt/SDCARD/cxsw/printer_data/log/moonraker.log /mnt/SDCARD/cxsw/printer_data/logs/moonraker.log /mnt/UDISK/printer_data/logs/moonraker.log; do
+        if [ -f "$log" ]; then
+            grep -iE 'spoolman|component.*(fail|load)|import.*error|traceback' "$log" | tail -50
+        fi
+    done
+}
+
 mark_installed() {
     touch "$INSTALLED_FILE" 2>/dev/null
     grep -qx 'spoolman' "$INSTALLED_FILE" 2>/dev/null || echo 'spoolman' >> "$INSTALLED_FILE"
@@ -247,5 +275,6 @@ remove_spoolman() {
 case "$1" in
     install|configure) install_spoolman ;;
     remove) remove_spoolman ;;
-    *) echo "Usage: $0 [install|configure|remove]"; exit 2 ;;
+    status|diagnose) diagnose_spoolman ;;
+    *) echo "Usage: $0 [install|configure|remove|status]"; exit 2 ;;
 esac

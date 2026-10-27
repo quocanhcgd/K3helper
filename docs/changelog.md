@@ -8,6 +8,7 @@
 - When K3 Moonraker is still using the read-only firmware config, switch its init script to the persistent UDISK wrapper with backups and automatic rollback.
 - Create the persistent wrapper on the writable printer config mount if it does not exist yet.
 - Add a K3 external Spoolman compatibility component for firmware builds that omit upstream `spoolman.py`; it exposes Fluidd's proxy/status/active-spool APIs without claiming extrusion accounting support.
+- Add K3 menu option 26 to inspect the component, config, endpoints, and Moonraker import errors.
 - Documented that Spoolman runs on a separate host and does not control physical K3 CFS slot selection.
 
 ## K3 Helper Script Self-Update and Fluidd Compatibility — October 27, 2026

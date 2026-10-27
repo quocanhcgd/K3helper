@@ -33,3 +33,4 @@ Choose **Remove a feature → 13) Spoolman connection**. The Helper Script backs
 - If the API check fails, confirm that the Spoolman host is reachable from the printer and that port `7912` is allowed through its firewall.
 - If Moonraker rolls the change back, inspect `/mnt/UDISK/printer_data/logs/moonraker.log` for a component import or configuration error.
 - If Moonraker reports the component as loaded but Fluidd does not show Spoolman, hard-refresh Fluidd and verify that the installed Fluidd copy is version `1.37.7` or later.
+- Run **26) Diagnose Spoolman integration** and check that `/server/info` contains `spoolman`, `/server/config` contains a `spoolman` section, and the two Spoolman endpoints do not return `404`.
