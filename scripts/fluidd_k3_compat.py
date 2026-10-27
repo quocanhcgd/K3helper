@@ -561,11 +561,7 @@ def patch_bundle(root: Path) -> None:
             delete_matches.append((asset, text))
         if "async downloadFile(" in text and "createFileUrlWithToken" in text:
             download_matches.append((asset, text))
-        if (
-            re.search(r"(?<![.$\w])getThumb\(", text)
-            and "relative_path" in text
-            and "createFileUrl" in text
-        ):
+        if "getThumb(" in text and "relative_path" in text:
             thumbnail_matches.append((asset, text))
 
     if not list_matches or not delete_matches:
@@ -614,9 +610,6 @@ def patch_bundle(root: Path) -> None:
     if not download_matches:
         raise RuntimeError("Could not find Fluidd file-download module.")
 
-    if not thumbnail_matches:
-        raise RuntimeError("Could not find Fluidd thumbnail URL module.")
-
     for download_asset, _ in download_matches:
         download_text = download_asset.read_text(encoding="utf-8")
         if OLD_FILE_DOWNLOAD in download_text:
@@ -631,13 +624,16 @@ def patch_bundle(root: Path) -> None:
                 )
         download_asset.write_text(download_text, encoding="utf-8")
 
+    thumbnail_patched = False
     for thumbnail_asset, thumbnail_text in thumbnail_matches:
         thumbnail_text, patched = patch_thumbnail_getter(thumbnail_text)
-        if not patched and "k3-thumbnail-fallback" not in thumbnail_text:
-            raise RuntimeError(
-                f"Fluidd thumbnail code did not match a supported version: {thumbnail_asset.name}"
-            )
+        if patched or K3_THUMBNAIL_PATCH_MARKER in thumbnail_text:
+            thumbnail_patched = True
+        else:
+            continue
         thumbnail_asset.write_text(thumbnail_text, encoding="utf-8")
+    if not thumbnail_patched:
+        print("K3 thumbnail fallback was not added; Fluidd will use Moonraker metadata.", file=sys.stderr)
 
 
 def patch_thumbnail_getter(text: str) -> tuple[str, bool]:
