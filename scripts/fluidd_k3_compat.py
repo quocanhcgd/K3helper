@@ -48,7 +48,7 @@ FIRMWARE_BADGE_SCRIPT = "creality-firmware-version.js"
 FIRMWARE_INFO_FILE = "creality-firmware-version.json"
 CFS_STATUS_ID = "creality-cfs-status-script"
 CFS_STATUS_SCRIPT = "creality-cfs-status.js"
-CFS_STATUS_VERSION = "2"
+CFS_STATUS_VERSION = "3"
 
 FIRMWARE_BADGE_SOURCE = r'''(() => {
   const badgeId = "creality-firmware-version-badge";
@@ -85,10 +85,29 @@ CFS_STATUS_SOURCE = r'''(() => {
 
   const panel = document.createElement("section");
   panel.id = rootId;
-  panel.style.cssText = "grid-column:1/-1;width:100%;max-height:min(560px,70vh);overflow:auto;color:#f4f5f6;background:#202428;border:1px solid rgba(255,255,255,.18);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.2);font:13px/1.45 sans-serif;margin:12px 0";
+  panel.className = "v-card creality-cfs-status-panel";
+  panel.style.cssText = "grid-column:1/-1;width:100%;max-height:min(560px,70vh);overflow:auto;font:13px/1.45 sans-serif;margin:12px 0";
+
+  const panelStyle = document.createElement("style");
+  panelStyle.id = "creality-cfs-status-style";
+  panelStyle.textContent = `
+    #${rootId} { color: inherit; }
+    #${rootId} .creality-cfs-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    #${rootId} .creality-cfs-metrics { display:flex; gap:18px; }
+    #${rootId} .creality-cfs-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    #${rootId} .creality-cfs-slot { display:flex; align-items:center; gap:9px; min-width:0; min-height:68px; padding:9px; text-align:left; justify-content:flex-start; }
+    #${rootId} .creality-cfs-slot--empty { opacity:.65; }
+    #${rootId} .creality-cfs-slot-text { display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+    #${rootId} .creality-cfs-slot-name, #${rootId} .creality-cfs-slot-material { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #${rootId} .creality-cfs-slot-material { opacity:.72; font-size:12px; }
+    #${rootId} .creality-cfs-swatch { width:26px; height:26px; flex:none; border-radius:50%; border:2px solid rgba(128,128,128,.5); box-shadow:inset 0 0 0 4px rgba(0,0,0,.12); }
+    @media (max-width:600px) { #${rootId} .creality-cfs-grid { grid-template-columns:1fr; } }
+  `;
+  document.head.appendChild(panelStyle);
 
   const header = document.createElement("div");
-  header.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.14)";
+  header.className = "v-card__title creality-cfs-header";
+  header.style.cssText = "padding:12px 14px";
   const title = document.createElement("div");
   title.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:700";
   const dot = document.createElement("span");
@@ -99,11 +118,13 @@ CFS_STATUS_SOURCE = r'''(() => {
   const refreshButton = document.createElement("button");
   refreshButton.type = "button";
   refreshButton.textContent = "Refresh";
-  refreshButton.style.cssText = "min-height:30px;padding:5px 10px;border:1px solid rgba(255,255,255,.2);border-radius:4px;background:#2d3338;color:#fff;cursor:pointer";
+  refreshButton.className = "v-btn v-btn--outlined v-size--small";
+  refreshButton.style.cssText = "min-height:30px;padding:5px 10px;cursor:pointer";
   header.append(title, refreshButton);
 
   const metrics = document.createElement("div");
-  metrics.style.cssText = "display:flex;gap:18px;padding:10px 14px;color:#c9d0d5;border-bottom:1px solid rgba(255,255,255,.1)";
+  metrics.className = "v-card__text creality-cfs-metrics";
+  metrics.style.cssText = "padding:10px 14px";
   const temperature = document.createElement("span");
   const humidity = document.createElement("span");
   temperature.textContent = "Temp: --";
@@ -111,9 +132,11 @@ CFS_STATUS_SOURCE = r'''(() => {
   metrics.append(temperature, humidity);
 
   const grid = document.createElement("div");
-  grid.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px 14px";
+  grid.className = "v-card__text creality-cfs-grid";
+  grid.style.cssText = "padding:12px 14px";
   const detail = document.createElement("div");
-  detail.style.cssText = "display:none;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.1);color:#c9d0d5;overflow-wrap:anywhere";
+  detail.className = "v-card__text";
+  detail.style.cssText = "display:none;padding:10px 14px 14px;overflow-wrap:anywhere";
   panel.append(header, metrics, grid, detail);
 
   let slots = [];
@@ -162,19 +185,19 @@ CFS_STATUS_SOURCE = r'''(() => {
     for (const slot of slots) {
       const card = document.createElement("button");
       card.type = "button";
-      card.style.cssText = "display:flex;align-items:center;gap:9px;min-width:0;min-height:68px;padding:9px;border:1px solid " + (slot.selected ? normalizeColor(slot.color) : "rgba(255,255,255,.14)") + ";border-radius:5px;background:" + (slot.present ? "#292f34" : "#24282c") + ";color:#f4f5f6;text-align:left;cursor:pointer;opacity:" + (slot.present ? "1" : ".65");
+      card.className = "v-btn v-btn--outlined v-size--small creality-cfs-slot" + (slot.present ? "" : " creality-cfs-slot--empty");
+      card.style.borderColor = slot.selected ? normalizeColor(slot.color) : "";
       const swatch = document.createElement("span");
-      swatch.style.cssText = "width:26px;height:26px;flex:none;border-radius:50%;background:" + normalizeColor(slot.color) + ";border:2px solid rgba(255,255,255,.4);box-shadow:inset 0 0 0 4px rgba(0,0,0,.12)";
+      swatch.className = "creality-cfs-swatch";
+      swatch.style.background = normalizeColor(slot.color);
       const text = document.createElement("span");
-      text.style.cssText = "display:flex;flex-direction:column;min-width:0;overflow:hidden";
+      text.className = "creality-cfs-slot-text";
       const name = document.createElement("strong");
       name.textContent = slot.slot + (slot.selected ? " · loaded" : "");
-      name.style.whiteSpace = "nowrap";
-      name.style.overflow = "hidden";
-      name.style.textOverflow = "ellipsis";
+      name.className = "creality-cfs-slot-name";
       const material = document.createElement("span");
       material.textContent = slot.present ? (slot.name || slot.type || "material") : "empty";
-      material.style.cssText = "color:#b9c1c7;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+      material.className = "creality-cfs-slot-material";
       text.append(name, material);
       card.append(swatch, text);
       card.addEventListener("click", () => {
@@ -291,21 +314,42 @@ CFS_STATUS_SOURCE = r'''(() => {
     if (!pollTimer) pollTimer = window.setInterval(refresh, 10000);
     return true;
   };
-  const tryMount = () => {
-    if (mount() && observer) {
-      observer.disconnect();
-      observer = null;
+  const unmount = () => {
+    const current = document.getElementById(rootId);
+    if (current) current.remove();
+  };
+  const syncMount = () => {
+    if (findDashboardContainer()) {
+      mount();
+    } else {
+      unmount();
     }
   };
   let observer = null;
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tryMount, { once: true });
-  else tryMount();
-  if (!document.getElementById(rootId) && document.body) {
-    observer = new MutationObserver(tryMount);
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncMount, { once: true });
+  else syncMount();
+  window.addEventListener("hashchange", syncMount);
+  window.addEventListener("popstate", syncMount);
+  if (document.body) {
+    observer = new MutationObserver(syncMount);
     observer.observe(document.body, { childList: true, subtree: true });
   }
 })();
 '''
+
+
+def ensure_custom_ui_directory(config_root: Path) -> None:
+    """Prepare Fluidd's documented custom UI directory without overwriting user files."""
+    theme_dir = config_root / ".fluidd-theme"
+    theme_dir.mkdir(parents=True, exist_ok=True)
+
+
+def default_config_root() -> Path:
+    """Use the directory exposed by K3 Moonraker's config file manager when present."""
+    moonraker_root = Path("/mnt/SDCARD/cxsw/printer_data/config")
+    if moonraker_root.is_dir():
+        return moonraker_root
+    return Path("/mnt/UDISK/printer_data/config")
 
 
 def install_firmware_version_display(root: Path, version_file: Path) -> None:
@@ -624,6 +668,7 @@ def install(
     destination: Path,
     nginx: Path,
     version_file: Path,
+    config_root: Path,
     refresh: bool = False,
 ) -> None:
     if not source.is_dir():
@@ -659,6 +704,7 @@ def install(
         patch_bundle(destination)
     install_firmware_version_display(destination, version_file)
     install_cfs_status_display(destination)
+    ensure_custom_ui_directory(config_root)
     configure_nginx(
         nginx,
         destination,
@@ -677,14 +723,26 @@ def main() -> int:
         type=Path,
         default=Path("/mnt/UDISK/creality/userdata/config/system_version.json"),
     )
+    parser.add_argument(
+        "--config-root",
+        type=Path,
+        default=default_config_root(),
+    )
     parser.add_argument("--refresh", action="store_true")
     args = parser.parse_args()
     try:
-        install(args.source, args.destination, args.nginx, args.firmware_version, args.refresh)
+        install(
+            args.source,
+            args.destination,
+            args.nginx,
+            args.firmware_version,
+            args.config_root,
+            args.refresh,
+        )
     except Exception as exc:
         print(f"K3 Fluidd compatibility setup failed: {exc}", file=sys.stderr)
         return 1
-    print("Fluidd patched for K3 webcam compatibility and Creality firmware version display.")
+    print("Fluidd patched for K3 compatibility, firmware version display, and Custom UI support.")
     return 0
 
 
