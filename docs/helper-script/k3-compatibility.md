@@ -22,15 +22,23 @@ To add menu option 15 to an older installation, bootstrap the updater files once
 ```sh
 python3 - <<'PY'
 import os
+import json
 import urllib.request
 from pathlib import Path
 
-base = "https://raw.githubusercontent.com/quocanhcgd/K3helper/main/"
+headers = {"User-Agent": "K3helper-bootstrap/1.0"}
+request = urllib.request.Request(
+    "https://api.github.com/repos/quocanhcgd/K3helper/branches/main",
+    headers=headers,
+)
+with urllib.request.urlopen(request, timeout=30) as response:
+    commit = json.loads(response.read())["commit"]["sha"]
+base = "https://raw.githubusercontent.com/quocanhcgd/K3helper/%s/" % commit
 root = Path("/mnt/UDISK/helper-script")
 for relative in ("helper.sh", "scripts/update_helper.sh", "scripts/update_helper.py"):
     target = root / relative
     temporary = target.with_name(target.name + ".tmp")
-    request = urllib.request.Request(base + relative, headers={"User-Agent": "K3helper-bootstrap/1.0"})
+    request = urllib.request.Request(base + relative, headers=headers)
     with urllib.request.urlopen(request, timeout=30) as response, open(temporary, "wb") as output:
         output.write(response.read())
     os.chmod(temporary, 0o755)

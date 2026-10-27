@@ -3,7 +3,7 @@
 ## K3 Helper Script Self-Update and Fluidd Compatibility — October 27, 2026
 
 ### Added
-- Added K3 menu option 15 to update `helper.sh` and runtime scripts from the public K3helper repository without downloading or extracting a ZIP archive. Downloads are staged and checked against GitHub blob hashes before replacement.
+- Added K3 menu option 15 to update `helper.sh` and runtime scripts from the public K3helper repository without downloading or extracting a ZIP archive. It resolves and pins the latest branch commit, stages downloads, checks Git blob hashes, and replaces files only after verification.
 - Fluidd update/repair now carries the K3 webcam, file-download, Jobs thumbnail, and RE-PRINT thumbnail integrations as part of the normal Helper Script workflow.
 - Camera repair keeps the existing writable Fluidd release and reapplies its compatibility patches instead of resetting it to the firmware-bundled version.
 

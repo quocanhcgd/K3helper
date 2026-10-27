@@ -52,9 +52,19 @@ def update() -> int:
     if not root.is_dir():
         raise RuntimeError("Helper Script directory was not found: %s" % root)
 
-    tree_url = "https://api.github.com/repos/%s/git/trees/%s?recursive=1" % (
+    branch_url = "https://api.github.com/repos/%s/branches/%s" % (
         REPOSITORY,
         BRANCH,
+    )
+    branch_data = json.loads(request_bytes(branch_url).decode("utf-8"))
+    commit_sha = branch_data.get("commit", {}).get("sha")
+    tree_sha = branch_data.get("commit", {}).get("commit", {}).get("tree", {}).get("sha")
+    if not commit_sha or not tree_sha:
+        raise RuntimeError("GitHub did not return the latest branch commit and tree.")
+
+    tree_url = "https://api.github.com/repos/%s/git/trees/%s?recursive=1" % (
+        REPOSITORY,
+        tree_sha,
     )
     tree_data = json.loads(request_bytes(tree_url).decode("utf-8"))
     if tree_data.get("truncated"):
@@ -74,7 +84,7 @@ def update() -> int:
 
             raw_url = "https://raw.githubusercontent.com/%s/%s/%s" % (
                 REPOSITORY,
-                BRANCH,
+                commit_sha,
                 urllib.parse.quote(entry["path"], safe="/"),
             )
             data = request_bytes(raw_url, "application/octet-stream")
@@ -95,7 +105,7 @@ def update() -> int:
             os.replace(stage_path, destination)
 
         print("Updated %d Helper Script runtime file(s) from %s:%s." % (
-            len(staged), REPOSITORY, tree_data.get("sha", BRANCH)
+            len(staged), REPOSITORY, commit_sha[:7]
         ))
         print("Existing Fluidd files, printer configuration, and local data were left in place.")
         print("Restart helper.sh to load the updated menu and commands.")
