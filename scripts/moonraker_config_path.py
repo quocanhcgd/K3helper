@@ -11,6 +11,11 @@ DEFAULT_CANDIDATES = (
     "/mnt/UDISK/moonraker.conf",
     "/mnt/UDISK/printer_data/config/moonraker.conf",
 )
+PERSISTENT_CONFIG_DIRS = (
+    "/mnt/UDISK/printer_data/config",
+    "/mnt/SDCARD/cxsw/printer_data/config",
+)
+STOCK_CONFIG = "/usr/share/moonraker/moonraker.conf"
 CONFIG_OPTIONS = ("-c", "--configfile", "--config-file")
 
 
@@ -47,9 +52,35 @@ def resolve_config(proc_root="/proc", candidates=DEFAULT_CANDIDATES):
     raise RuntimeError("No Moonraker config found in the running process or known K3 data paths")
 
 
+def persistent_wrapper_path(candidates=DEFAULT_CANDIDATES, directories=PERSISTENT_CONFIG_DIRS):
+    for candidate in candidates:
+        if not os.path.isfile(candidate):
+            continue
+        try:
+            with open(candidate, "r", encoding="utf-8", errors="replace") as source:
+                if "[include %s]" % STOCK_CONFIG in source.read():
+                    return candidate
+        except OSError:
+            continue
+    for directory in directories:
+        if (
+            os.path.isdir(directory)
+            and os.path.isfile(os.path.join(directory, "printer.cfg"))
+            and os.access(directory, os.W_OK)
+        ):
+            return os.path.join(directory, "moonraker.conf")
+    raise RuntimeError("No writable Moonraker config directory found on UDISK mounts")
+
+
 def main():
     try:
-        print(resolve_config())
+        if len(sys.argv) == 2 and sys.argv[1] == "wrapper":
+            print(persistent_wrapper_path())
+        elif len(sys.argv) == 1:
+            print(resolve_config())
+        else:
+            print("Usage: %s [wrapper]" % sys.argv[0], file=sys.stderr)
+            return 2
     except (OSError, RuntimeError) as error:
         print("Moonraker config lookup failed: %s" % error, file=sys.stderr)
         return 1

@@ -9,6 +9,33 @@ import tempfile
 
 
 def update_config(path, action, server=None):
+    if action == "init-wrapper":
+        stock_config = server
+        if not stock_config:
+            raise ValueError("init-wrapper requires the stock Moonraker config path")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8", newline="") as existing:
+                if "[include %s]" % stock_config not in existing.read():
+                    raise ValueError("existing moonraker.conf does not include the stock config; left unchanged")
+            return
+        directory = os.path.dirname(os.path.abspath(path))
+        content = "# K3 Moonraker persistent configuration wrapper\n[include %s]\n" % stock_config
+        fd, temporary = tempfile.mkstemp(prefix=".moonraker-spoolman-", dir=directory)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as target:
+                target.write(content)
+                target.flush()
+                os.fsync(target.fileno())
+            os.chmod(temporary, 0o644)
+            os.replace(temporary, path)
+        except Exception:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+        return
+
     with open(path, "r", encoding="utf-8", newline="") as source:
         content = source.read()
 
@@ -50,12 +77,12 @@ def update_config(path, action, server=None):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("set", "remove"))
+    parser.add_argument("action", choices=("set", "remove", "init-wrapper"))
     parser.add_argument("config")
     parser.add_argument("server", nargs="?")
     args = parser.parse_args()
-    if args.action == "set" and not args.server:
-        parser.error("set requires a Spoolman server URL")
+    if args.action in ("set", "init-wrapper") and not args.server:
+        parser.error("set requires a server URL; init-wrapper requires the stock config path")
     try:
         update_config(args.config, args.action, args.server)
     except (OSError, ValueError) as error:

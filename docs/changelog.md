@@ -6,6 +6,7 @@
 - Added a K3 Helper Script action to connect Moonraker and Fluidd to an existing LAN Spoolman server. It validates the Spoolman API, backs up the writable config, verifies Moonraker loaded the component, and restores the prior config if loading fails.
 - Detect Moonraker's active config path from its running process, including the K3 `/mnt/SDCARD/cxsw/printer_data/config` mount.
 - When K3 Moonraker is still using the read-only firmware config, switch its init script to the persistent UDISK wrapper with backups and automatic rollback.
+- Create the persistent wrapper on the writable printer config mount if it does not exist yet.
 - Documented that Spoolman runs on a separate host and does not control physical K3 CFS slot selection.
 
 ## K3 Helper Script Self-Update and Fluidd Compatibility — October 27, 2026

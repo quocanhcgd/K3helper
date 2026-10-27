@@ -36,7 +36,10 @@ check_k3_config() {
             MOONRAKER_CONF=$ACTIVE_MOONRAKER_CONF
             ;;
         "$MOONRAKER_STOCK_CONF")
-            MOONRAKER_CONF=$CONFIG_DIR/moonraker.conf
+            MOONRAKER_CONF=$(python3 "$CONFIG_PATH_HELPER" wrapper) || {
+                log_error "Could not find the writable K3 printer config directory."
+                return 1
+            }
             NEED_STARTUP_PATCH=1
             if ! awk '$2 == "/etc" && $3 == "overlay" && $4 ~ /(^|,)rw(,|$)/ { found=1 } END { exit !found }' /proc/mounts; then
                 log_error "The /etc overlay is not mounted read-write; cannot persist the Moonraker startup change."
@@ -50,7 +53,7 @@ check_k3_config() {
             return 1
             ;;
     esac
-    if [ ! -f "$MOONRAKER_CONF" ]; then
+    if [ ! -e "$MOONRAKER_CONF" ] && [ "$NEED_STARTUP_PATCH" != "1" ]; then
         log_error "Moonraker's active config file was not found: $MOONRAKER_CONF"
         return 1
     fi
@@ -63,12 +66,12 @@ check_k3_config() {
         log_error "Moonraker config is a symbolic link; refusing to replace it atomically."
         return 1
     fi
-    if [ ! -w "$MOONRAKER_CONF" ]; then
+    if [ -e "$MOONRAKER_CONF" ] && [ ! -w "$MOONRAKER_CONF" ]; then
         log_error "Moonraker's active config is not writable: $MOONRAKER_CONF"
         return 1
     fi
-    if [ "$NEED_STARTUP_PATCH" = "1" ] && ! grep -qF '[include /usr/share/moonraker/moonraker.conf]' "$MOONRAKER_CONF"; then
-        log_error "Persistent Moonraker wrapper is missing its stock config include: $MOONRAKER_CONF"
+    if [ ! -w "$(dirname "$MOONRAKER_CONF")" ]; then
+        log_error "Moonraker config directory is not writable: $(dirname "$MOONRAKER_CONF")"
         return 1
     fi
     [ -f "$CONFIG_HELPER" ] || { log_error "Missing $CONFIG_HELPER"; return 1; }
@@ -153,12 +156,23 @@ install_spoolman() {
 
     backup="$MOONRAKER_CONF.spoolman.bak.$(date +%Y%m%d-%H%M%S)"
     [ ! -e "$backup" ] || backup="$backup.$$"
-    cp -p "$MOONRAKER_CONF" "$backup" || { log_error "Could not back up Moonraker config."; return 1; }
+    wrapper_created=0
+    if [ -e "$MOONRAKER_CONF" ]; then
+        cp -p "$MOONRAKER_CONF" "$backup" || { log_error "Could not back up Moonraker config."; return 1; }
+    elif [ "$NEED_STARTUP_PATCH" = "1" ]; then
+        wrapper_created=1
+    fi
+    if [ "$wrapper_created" = "1" ]; then
+        python3 "$CONFIG_HELPER" init-wrapper "$MOONRAKER_CONF" "$MOONRAKER_STOCK_CONF" || return 1
+    fi
+    if [ -e "$MOONRAKER_CONF" ]; then
+        cp -p "$MOONRAKER_CONF" "$backup" || { log_error "Could not back up Moonraker config."; return 1; }
+    fi
     python3 "$CONFIG_HELPER" set "$MOONRAKER_CONF" "$server_url" || return 1
     startup_patched=0
     if [ "$NEED_STARTUP_PATCH" = "1" ]; then
         if ! python3 "$STARTUP_HELPER" patch "$MOONRAKER_CONF"; then
-            cp -p "$backup" "$MOONRAKER_CONF"
+            if [ "$wrapper_created" = "1" ]; then rm -f "$MOONRAKER_CONF"; else cp -p "$backup" "$MOONRAKER_CONF"; fi
             log_error "Could not switch Moonraker to the persistent config; restored its config file."
             return 1
         fi
@@ -181,7 +195,11 @@ install_spoolman() {
     done
 
     log_error "Moonraker did not load its spoolman component; restoring the previous config."
-    cp -p "$backup" "$MOONRAKER_CONF" || { log_error "Automatic config rollback failed; restore $backup manually."; return 1; }
+    if [ "$wrapper_created" = "1" ]; then
+        rm -f "$MOONRAKER_CONF"
+    else
+        cp -p "$backup" "$MOONRAKER_CONF" || { log_error "Automatic config rollback failed; restore $backup manually."; return 1; }
+    fi
     if [ "$startup_patched" = "1" ]; then
         python3 "$STARTUP_HELPER" restore || log_error "Could not restore the original Moonraker startup script."
     fi
