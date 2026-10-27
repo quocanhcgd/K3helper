@@ -3,11 +3,12 @@
 
 SCRIPT_DIR=/mnt/UDISK/helper-script
 CONFIG_DIR=/mnt/UDISK/printer_data/config
-MOONRAKER_CONF=$CONFIG_DIR/moonraker.conf
+MOONRAKER_CONF=
 INSTALLED_FILE=$SCRIPT_DIR/.installed
 . "$SCRIPT_DIR/scripts/system.sh"
 
 CONFIG_HELPER=$SCRIPT_DIR/scripts/spoolman_config.py
+CONFIG_PATH_HELPER=$SCRIPT_DIR/scripts/moonraker_config_path.py
 
 require_root() {
     [ "$(id -u)" = 0 ] || { log_error "Run this script as root."; return 1; }
@@ -18,8 +19,24 @@ check_k3_config() {
         log_error "This integration is currently enabled for K3 only."
         return 1
     fi
-    if [ ! -f "$MOONRAKER_CONF" ] || ! grep -qF '[include /usr/share/moonraker/moonraker.conf]' "$MOONRAKER_CONF"; then
-        log_error "The expected K3 Moonraker config wrapper was not found at $MOONRAKER_CONF."
+    if [ ! -f "$CONFIG_PATH_HELPER" ]; then
+        log_error "Missing $CONFIG_PATH_HELPER"
+        return 1
+    fi
+    MOONRAKER_CONF=$(python3 "$CONFIG_PATH_HELPER") || {
+        log_error "Could not identify Moonraker's active writable config file."
+        log_info "No configuration was changed."
+        return 1
+    }
+    case "$MOONRAKER_CONF" in
+        /mnt/SDCARD/*|/mnt/UDISK/*) ;;
+        *)
+            log_error "Moonraker config is outside the persistent K3 data mounts: $MOONRAKER_CONF"
+            return 1
+            ;;
+    esac
+    if [ ! -f "$MOONRAKER_CONF" ]; then
+        log_error "Moonraker's active config file was not found: $MOONRAKER_CONF"
         return 1
     fi
     if ! find /usr/share/moonraker -type f -name spoolman.py -print 2>/dev/null | grep -q .; then
@@ -31,7 +48,12 @@ check_k3_config() {
         log_error "Moonraker config is a symbolic link; refusing to replace it atomically."
         return 1
     fi
+    if [ ! -w "$MOONRAKER_CONF" ]; then
+        log_error "Moonraker's active config is not writable: $MOONRAKER_CONF"
+        return 1
+    fi
     [ -f "$CONFIG_HELPER" ] || { log_error "Missing $CONFIG_HELPER"; return 1; }
+    log_info "Using active Moonraker config: $MOONRAKER_CONF"
 }
 
 check_moonraker() {

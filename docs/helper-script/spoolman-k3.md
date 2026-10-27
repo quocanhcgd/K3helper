@@ -18,7 +18,7 @@ It should return JSON. Use the base URL, without `/api/v1/info`, in the Helper S
 
 Update the K3 Helper Script to the latest version, run `helper.sh`, and choose **25) Connect Fluidd to Spoolman**. Enter the Spoolman base URL, for example `http://192.168.0.20:7912`.
 
-The installer checks the Spoolman API before changing Moonraker, saves a timestamped copy of `moonraker.conf`, writes the `[spoolman]` section under `/mnt/UDISK/printer_data/config/`, restarts Moonraker, and verifies that the `spoolman` component loaded. If Moonraker does not load it, the installer restores the saved config and restarts Moonraker again.
+The installer checks the Spoolman API before changing Moonraker, detects the active config path from the Moonraker process (including the K3 mount at `/mnt/SDCARD/cxsw/printer_data/config/`), saves a timestamped config backup, writes the `[spoolman]` section, restarts Moonraker, and verifies that the `spoolman` component loaded. If Moonraker does not load it, the installer restores the saved config and restarts Moonraker again.
 
 After the success message, refresh Fluidd at `http://<printer-ip>:4408`. Its built-in Spoolman controls can manage spools and set the active spool for usage tracking. Moonraker periodically sends filament usage to Spoolman.
 
