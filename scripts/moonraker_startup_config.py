@@ -176,6 +176,24 @@ def restore_all(candidates=None):
     return restored
 
 
+def patch_pythonpath(candidates=None):
+    """Enable the K3 Helper Python hooks without changing Moonraker's config."""
+    patched = []
+    for path, content in find_services(candidates):
+        backup = path + ".k3helper-pythonpath.bak"
+        if not os.path.exists(backup):
+            shutil.copy2(path, backup)
+        updated = inject_pythonpath(content)
+        if updated == content:
+            patched.append(path)
+            continue
+        atomic_write(path, updated, os.stat(path).st_mode & 0o777)
+        patched.append(path)
+    if not patched:
+        raise RuntimeError("No Moonraker init script could be patched")
+    return patched
+
+
 def main():
     try:
         if len(sys.argv) == 2 and sys.argv[1] == "check":
@@ -185,6 +203,8 @@ def main():
             print("\n".join(patch_all(sys.argv[2])))
         elif len(sys.argv) == 2 and sys.argv[1] == "restore":
             print("\n".join(restore_all()))
+        elif len(sys.argv) == 2 and sys.argv[1] == "patch-pythonpath":
+            print("\n".join(patch_pythonpath()))
         else:
             print("Usage: %s [check|patch CONFIG|restore]" % sys.argv[0], file=sys.stderr)
             return 2

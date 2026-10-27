@@ -27,7 +27,7 @@ try:
     original_init = file_manager_class.__init__
 
     if not getattr(original_init, "_k3helper_reserved_path_fix", False):
-        package_root = pathlib.Path(moonraker.__file__).resolve().parent
+        package_root = pathlib.Path("/usr/share/moonraker").resolve()
 
         def patched_init(self, config):
             original_init(self, config)

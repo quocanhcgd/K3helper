@@ -12,6 +12,7 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 
 FLUIDD_DIR=/usr/share/fluidd
 K3_FLUIDD_COMPAT=$SCRIPT_DIR/scripts/fluidd_k3_compat.py
+MOONRAKER_STARTUP_HELPER=$SCRIPT_DIR/scripts/moonraker_startup_config.py
 if is_k3; then
     FLUIDD_DIR=$SCRIPT_DIR/fluidd
 fi
@@ -196,6 +197,10 @@ PYEOF
 }
 
 configure_fluidd_for_k3() {
+    if [ -f "$MOONRAKER_STARTUP_HELPER" ] && [ -x /etc/init.d/moonraker ]; then
+        python3 "$MOONRAKER_STARTUP_HELPER" patch-pythonpath >/dev/null 2>&1 || \
+            log_warn "Could not enable K3 Moonraker file-access compatibility."
+    fi
     python3 "$K3_FLUIDD_COMPAT" install \
         --source /usr/share/fluidd \
         --destination "$SCRIPT_DIR/fluidd" \
