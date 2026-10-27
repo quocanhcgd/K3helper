@@ -49,6 +49,14 @@ K3_FILE_API_ORIGIN_METHOD = (
     "a=window.location.origin}catch{}"
     "return`${a}/server/files/${r}?date=${n||Date.now()}`}"
 )
+K3_ONESHOT_TOKEN_MARKER = "k3-http-oneshot-token-v1"
+K3_ONESHOT_TOKEN_METHOD = (
+    "async createFileUrlWithToken(e,t,n){/* k3-http-oneshot-token-v1 */"
+    "let r=this.createFileUrl(e,t,n);if(this.isTrustedUser)return r;"
+    "try{let i=await fetch(new URL(`/access/oneshot_token`,window.location.origin),"
+    "{credentials:`same-origin`});if(i.ok){let a=await i.json();"
+    "if(a.result)return`${r}&token=${a.result}`}}catch{}return r}"
+)
 LEGACY_FILE_DOWNLOAD = (
     "async downloadFile(e,t){let n=this.createFileUrl(e,t);"
     "try{let r=new URL(n);r.origin!==window.location.origin&&"
@@ -681,12 +689,57 @@ def patch_file_api_origin(text: str) -> tuple[str, bool]:
     return text[:start] + method + text[close_brace:], True
 
 
+def patch_http_oneshot_token(text: str) -> tuple[str, bool]:
+    """Use Moonraker's HTTP token endpoint instead of its missing K3 RPC."""
+    if K3_ONESHOT_TOKEN_MARKER in text:
+        return text, False
+
+    marker = re.compile(r"(?<![.$\w])async createFileUrlWithToken\((\w+),(\w+),(\w+)\)\{")
+    match = marker.search(text)
+    if not match:
+        return text, False
+    start = match.start()
+    open_brace = match.end() - 1
+    depth = 0
+    quote = None
+    escaped = False
+    close_brace = -1
+    for position in range(open_brace, len(text)):
+        char = text[position]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in "'\"`":
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                close_brace = position + 1
+                break
+    if close_brace < 0:
+        return text, False
+
+    method = K3_ONESHOT_TOKEN_METHOD.replace(
+        "createFileUrlWithToken(e,t,n)",
+        f"createFileUrlWithToken({match.group(1)},{match.group(2)},{match.group(3)})",
+    ).replace("this.createFileUrl(e,t,n)", f"this.createFileUrl({match.group(1)},{match.group(2)},{match.group(3)})")
+    return text[:start] + method + text[close_brace:], True
+
+
 def patch_bundle(root: Path) -> None:
     list_matches = []
     delete_matches = []
     download_matches = []
     thumbnail_matches = []
     file_api_matches = []
+    token_matches = []
     for asset in (root / "assets").glob("*.js"):
         text = asset.read_text(encoding="utf-8")
         if "setWebcamsList(" in text:
@@ -699,6 +752,8 @@ def patch_bundle(root: Path) -> None:
             thumbnail_matches.append((asset, text))
         if re.search(r"(?<![.$\w])createFileUrl\(\w+,\w+,\w+\)\{", text) and "/server/files/" in text:
             file_api_matches.append((asset, text))
+        if "async createFileUrlWithToken(" in text and "accessOneshotToken" in text:
+            token_matches.append((asset, text))
 
     if not list_matches or not delete_matches:
         raise RuntimeError(
@@ -757,6 +812,18 @@ def patch_bundle(root: Path) -> None:
                 f"Fluidd file API URL code did not match a supported version: {file_api_asset.name}"
             )
         file_api_asset.write_text(file_api_text, encoding="utf-8")
+
+    if not token_matches:
+        raise RuntimeError("Could not find Fluidd one-shot token module.")
+
+    for token_asset, _ in token_matches:
+        token_text = token_asset.read_text(encoding="utf-8")
+        token_text, _ = patch_http_oneshot_token(token_text)
+        if K3_ONESHOT_TOKEN_MARKER not in token_text:
+            raise RuntimeError(
+                f"Fluidd one-shot token code did not match a supported version: {token_asset.name}"
+            )
+        token_asset.write_text(token_text, encoding="utf-8")
 
     for download_asset, _ in download_matches:
         download_text = download_asset.read_text(encoding="utf-8")
