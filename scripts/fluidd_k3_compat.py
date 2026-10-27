@@ -561,7 +561,11 @@ def patch_bundle(root: Path) -> None:
             delete_matches.append((asset, text))
         if "async downloadFile(" in text and "createFileUrlWithToken" in text:
             download_matches.append((asset, text))
-        if "getThumb(" in text and "relative_path" in text and "createFileUrl" in text:
+        if (
+            re.search(r"(?<![.$\w])getThumb\(", text)
+            and "relative_path" in text
+            and "createFileUrl" in text
+        ):
             thumbnail_matches.append((asset, text))
 
     if not list_matches or not delete_matches:
