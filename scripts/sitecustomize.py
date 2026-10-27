@@ -29,8 +29,24 @@ try:
     # which also contains Klipper's registered docs root. That makes the
     # file manager reject its own docs directory as a reserved Moonraker path.
     moonraker = importlib.import_module("moonraker")
-    module = importlib.import_module("moonraker.components.file_manager.file_manager")
-    file_manager_class = module.FileManager
+
+    # Upstream Moonraker keeps FileManager in a package, while K3 firmware
+    # has shipped both the package and a flattened module over time.
+    file_manager_class = None
+    for module_name in (
+        "moonraker.components.file_manager.file_manager",
+        "moonraker.components.file_manager",
+    ):
+        try:
+            module = importlib.import_module(module_name)
+        except ModuleNotFoundError:
+            continue
+        candidate = getattr(module, "FileManager", None)
+        if candidate is not None:
+            file_manager_class = candidate
+            break
+    if file_manager_class is None:
+        raise ImportError("Moonraker FileManager class was not found")
     original_init = file_manager_class.__init__
     original_check_reserved_path = file_manager_class.check_reserved_path
 
@@ -58,17 +74,19 @@ try:
     if not getattr(original_check_reserved_path, "_k3helper_registered_root_fix", False):
         def patched_check_reserved_path(self, req_path, need_write, raise_error=True):
             path = pathlib.Path(req_path).expanduser().resolve()
-            registered = [pathlib.Path(item).resolve() for item in self.file_paths.values()]
-            if any(root == path or root in path.parents for root in registered):
-                for name, (reserved_root, can_read) in self.reserved_paths.items():
-                    if name != "moonraker":
-                        continue
-                    reserved_root = pathlib.Path(reserved_root).resolve()
-                    if reserved_root == path or reserved_root in path.parents:
-                        # Registered Moonraker roots are explicit data folders;
-                        # they must remain accessible even when firmware's
-                        # source path incorrectly contains one of them.
-                        return False
+            # A registered data root is an explicit public Moonraker API root.
+            # Creality's build sometimes reports a broad source directory as
+            # the reserved "moonraker" path, which incorrectly catches
+            # config/docs below it. Check registered roots first; normal
+            # write-access checks still enforce read-only roots separately.
+            registered = [
+                pathlib.Path(item).expanduser().resolve()
+                for item in getattr(self, "file_paths", {}).values()
+            ]
+            if ".git" not in path.parts and any(
+                root == path or root in path.parents for root in registered
+            ):
+                return False
             return original_check_reserved_path(self, req_path, need_write, raise_error)
 
         patched_check_reserved_path._k3helper_registered_root_fix = True
