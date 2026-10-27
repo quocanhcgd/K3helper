@@ -695,7 +695,10 @@ def patch_bundle(root: Path) -> None:
         download_asset.write_text(download_text, encoding="utf-8")
 
     thumbnail_patched = False
-    for thumbnail_asset, thumbnail_text in thumbnail_matches:
+    for thumbnail_asset, _ in thumbnail_matches:
+        # Earlier compatibility passes may have edited this same bundle.
+        # Reload it here so the thumbnail patch cannot erase webcam/download fixes.
+        thumbnail_text = thumbnail_asset.read_text(encoding="utf-8")
         thumbnail_text, patched = patch_thumbnail_getter(thumbnail_text)
         if patched or K3_THUMBNAIL_PATCH_MARKER in thumbnail_text:
             thumbnail_patched = True
