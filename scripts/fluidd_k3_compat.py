@@ -55,7 +55,7 @@ CFS_STATUS_VERSION = "4"
 K3_THUMBNAIL_PATCH_MARKER = "k3-thumbnail-fallback-v2"
 REPRINT_THUMBNAILS_ID = "creality-reprint-thumbnails-script"
 REPRINT_THUMBNAILS_SCRIPT = "creality-reprint-thumbnails.js"
-REPRINT_THUMBNAILS_VERSION = "1"
+REPRINT_THUMBNAILS_VERSION = "2"
 
 FIRMWARE_BADGE_SOURCE = r'''(() => {
   const badgeId = "creality-firmware-version-badge";
@@ -371,8 +371,11 @@ REPRINT_THUMBNAILS_SOURCE = r'''(() => {
     for (const table of document.querySelectorAll("table")) {
       const headers = [...table.querySelectorAll("thead th")]
         .map((cell) => cell.textContent.trim().toLowerCase());
-      if (!headers.includes("name") || !headers.includes("status") ||
-          !headers.includes("print duration")) continue;
+      const isReprint = headers.includes("name") && headers.includes("status") &&
+        headers.includes("print duration");
+      const isFileList = headers.includes("name") && headers.includes("last printed") &&
+        headers.includes("modified") && headers.includes("size");
+      if (!isReprint && !isFileList) continue;
 
       for (const row of table.querySelectorAll("tbody tr")) {
         const cells = row.querySelectorAll("td");
@@ -383,7 +386,7 @@ REPRINT_THUMBNAILS_SOURCE = r'''(() => {
         const image = document.createElement("img");
         image.alt = "";
         image.setAttribute("aria-hidden", "true");
-        image.style.cssText = "display:block;width:54px;height:34px;object-fit:contain";
+        image.style.cssText = "display:block;width:42px;height:28px;object-fit:contain";
         row.dataset.k3Thumb = "loading";
         image.onload = () => {
           if (!row.isConnected || cells[1]?.textContent.trim() !== filename) return;
