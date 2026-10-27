@@ -56,10 +56,6 @@ check_k3_config() {
             return 1
             ;;
     esac
-    if [ ! -e "$MOONRAKER_CONF" ] && [ "$NEED_STARTUP_PATCH" != "1" ]; then
-        log_error "Moonraker's active config file was not found: $MOONRAKER_CONF"
-        return 1
-    fi
     CUSTOM_COMPONENT_ENABLED=0
     if ! find /usr/share/moonraker -type f -name spoolman.py -print 2>/dev/null | grep -q .; then
         if [ ! -f "$CUSTOM_COMPONENT" ] || [ ! -f "$CUSTOM_COMPONENT_ENTRY" ] || [ ! -f "$CUSTOM_SITE" ]; then
@@ -74,6 +70,10 @@ check_k3_config() {
     if [ "$NEED_STARTUP_PATCH" = "1" ]; then
         [ -f "$STARTUP_HELPER" ] || { log_error "Missing $STARTUP_HELPER"; return 1; }
         python3 "$STARTUP_HELPER" check >/dev/null || { log_error "Moonraker startup script cannot be safely patched."; return 1; }
+    fi
+    if [ ! -e "$MOONRAKER_CONF" ] && [ "$NEED_STARTUP_PATCH" != "1" ]; then
+        log_error "Moonraker's active config file was not found: $MOONRAKER_CONF"
+        return 1
     fi
     if [ -L "$MOONRAKER_CONF" ]; then
         log_error "Moonraker config is a symbolic link; refusing to replace it atomically."
