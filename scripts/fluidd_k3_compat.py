@@ -2,10 +2,13 @@
 """Install and patch a UDISK-hosted Fluidd copy for the K3 Moonraker API."""
 
 import argparse
+import base64
 import json
 import re
 import shutil
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 
@@ -548,6 +551,7 @@ def patch_bundle(root: Path) -> None:
     list_matches = []
     delete_matches = []
     download_matches = []
+    thumbnail_matches = []
     for asset in (root / "assets").glob("*.js"):
         text = asset.read_text(encoding="utf-8")
         if "setWebcamsList(" in text:
@@ -556,6 +560,8 @@ def patch_bundle(root: Path) -> None:
             delete_matches.append((asset, text))
         if "async downloadFile(" in text and "createFileUrlWithToken" in text:
             download_matches.append((asset, text))
+        if "getThumb(" in text and "relative_path" in text and "createFileUrl" in text:
+            thumbnail_matches.append((asset, text))
 
     if not list_matches or not delete_matches:
         raise RuntimeError(
@@ -603,6 +609,9 @@ def patch_bundle(root: Path) -> None:
     if not download_matches:
         raise RuntimeError("Could not find Fluidd file-download module.")
 
+    if not thumbnail_matches:
+        raise RuntimeError("Could not find Fluidd thumbnail URL module.")
+
     for download_asset, _ in download_matches:
         download_text = download_asset.read_text(encoding="utf-8")
         if OLD_FILE_DOWNLOAD in download_text:
@@ -616,6 +625,132 @@ def patch_bundle(root: Path) -> None:
                     f"Fluidd file-download code did not match a supported version: {download_asset.name}"
                 )
         download_asset.write_text(download_text, encoding="utf-8")
+
+    for thumbnail_asset, thumbnail_text in thumbnail_matches:
+        thumbnail_text, patched = patch_thumbnail_getter(thumbnail_text)
+        if not patched and "k3-thumbnail-fallback" not in thumbnail_text:
+            raise RuntimeError(
+                f"Fluidd thumbnail code did not match a supported version: {thumbnail_asset.name}"
+            )
+        thumbnail_asset.write_text(thumbnail_text, encoding="utf-8")
+
+
+def patch_thumbnail_getter(text: str) -> tuple[str, bool]:
+    """Use K3-extracted sidecar thumbnails when Moonraker metadata lacks them."""
+    marker = "getThumb("
+    start = text.find(marker)
+    while start >= 0:
+        open_paren = start + len("getThumb")
+        close_paren = text.find(")", open_paren + 1)
+        open_brace = text.find("{", close_paren + 1)
+        if close_paren < 0 or open_brace < 0:
+            return text, False
+
+        depth = 0
+        quote = None
+        escaped = False
+        close_brace = -1
+        for position in range(open_brace, len(text)):
+            char = text[position]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in "'\"`":
+                quote = char
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    close_brace = position + 1
+                    break
+        if close_brace < 0:
+            return text, False
+
+        args = [value.strip() for value in text[open_paren + 1 : close_paren].split(",")]
+        body = text[open_brace:close_brace]
+        if len(args) >= 3 and "thumbnails" in body and "createFileUrl" in body:
+            file_arg, root_arg, path_arg = args[:3]
+            large_arg = args[3].split("=", 1)[0].strip() if len(args) > 3 else "large"
+            date_arg = args[4] if len(args) > 4 else "date"
+            replacement = (
+                f"getThumb({','.join(args)}){{"
+                f"if({file_arg}.thumbnails?.length){{"
+                f"const thumbs={file_arg}.thumbnails;"
+                f"const thumb=thumbs.reduce((a,b)=>(a.size>b.size)==={large_arg}?a:b);"
+                "if(thumb.relative_path){"
+                f"const filepath={path_arg}?`${{{root_arg}}}/${{{path_arg}}}`:{root_arg};"
+                f"return{{...thumb,url:this.createFileUrl(thumb.relative_path,filepath,{date_arg})}}"
+                "}"
+                "}"
+                f"if({file_arg}.type!==\"file\"||{file_arg}.extension!==\".gcode\")return;"
+                f"const filepath={path_arg}?`${{{root_arg}}}/${{{path_arg}}}`:{root_arg};"
+                f"const relativePath=`.thumbs/${{{file_arg}.filename.replace(/\\.gcode$/i,\"\")}}-300x300.png`;"
+                f"return{{width:300,height:300,size:0,relative_path:relativePath,url:this.createFileUrl(relativePath,filepath,{date_arg})}}"
+                "}"
+            )
+            return text[:start] + replacement + text[close_brace:], True
+        start = text.find(marker, close_brace)
+    return text, False
+
+
+def generate_k3_thumbnail_sidecars() -> int:
+    """Extract embedded G-code preview PNGs into Moonraker's static file root."""
+    roots_url = "http://127.0.0.1:7125/server/files/roots"
+    with urllib.request.urlopen(roots_url, timeout=10) as response:
+        roots = json.loads(response.read()).get("result", [])
+    gcode_root = next((Path(item["path"]) for item in roots if item.get("name") == "gcodes"), None)
+    if gcode_root is None or not gcode_root.is_dir():
+        raise RuntimeError("Could not resolve Moonraker's registered gcodes root.")
+
+    generated = 0
+    marker = re.compile(
+        rb";\s*thumbnail(?:_[A-Za-z0-9]+)?\s+begin\s+"
+        rb"(\d+)x(\d+)\s+(\d+)\s*\r?\n"
+        rb"(.*?)"
+        rb";[ \t]*thumbnail(?:_[A-Za-z0-9]+)?\s+end",
+        re.DOTALL | re.IGNORECASE,
+    )
+    for gcode in gcode_root.rglob("*.gcode"):
+        try:
+            with gcode.open("rb") as source:
+                data = source.read(1024 * 1024)
+            matches = []
+            for match in marker.finditer(data):
+                width, height, expected_size = map(int, match.group(1, 2, 3))
+                encoded = b"".join(
+                    line.strip()[1:].strip()
+                    for line in match.group(4).splitlines()
+                    if line.strip().startswith(b";")
+                )
+                if len(encoded) != expected_size:
+                    continue
+                image = base64.b64decode(encoded, validate=True)
+                if (
+                    image.startswith(b"\x89PNG\r\n\x1a\n")
+                    and width > 0
+                    and height > 0
+                ):
+                    matches.append((width * height, image))
+            if not matches:
+                continue
+            thumb_dir = gcode.parent / ".thumbs"
+            thumb_dir.mkdir(exist_ok=True)
+            target = thumb_dir / (gcode.stem + "-300x300.png")
+            if target.exists():
+                continue
+            temp = target.with_name(target.name + ".tmp")
+            temp.write_bytes(max(matches, key=lambda item: item[0])[1])
+            temp.replace(target)
+            generated += 1
+        except (OSError, ValueError, base64.binascii.Error):
+            continue
+    return generated
 
 
 def server_blocks(config: str):
@@ -727,6 +862,12 @@ def install(
     install_firmware_version_display(destination, version_file)
     install_cfs_status_display(destination)
     ensure_custom_ui_directory(config_root)
+    try:
+        generated = generate_k3_thumbnail_sidecars()
+        if generated:
+            print(f"Generated {generated} K3 G-code thumbnail sidecar(s).")
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        print(f"K3 thumbnail extraction skipped: {exc}", file=sys.stderr)
     configure_nginx(
         nginx,
         destination,
