@@ -48,7 +48,7 @@ FIRMWARE_BADGE_SCRIPT = "creality-firmware-version.js"
 FIRMWARE_INFO_FILE = "creality-firmware-version.json"
 CFS_STATUS_ID = "creality-cfs-status-script"
 CFS_STATUS_SCRIPT = "creality-cfs-status.js"
-CFS_STATUS_VERSION = "3"
+CFS_STATUS_VERSION = "4"
 
 FIRMWARE_BADGE_SOURCE = r'''(() => {
   const badgeId = "creality-firmware-version-badge";
@@ -85,8 +85,8 @@ CFS_STATUS_SOURCE = r'''(() => {
 
   const panel = document.createElement("section");
   panel.id = rootId;
-  panel.className = "v-card creality-cfs-status-panel";
-  panel.style.cssText = "grid-column:1/-1;width:100%;max-height:min(560px,70vh);overflow:auto;font:13px/1.45 sans-serif;margin:12px 0";
+  panel.className = "mb-2 mb-md-4 v-card v-sheet rounded-md collapsable-card creality-cfs-status-panel";
+  panel.style.cssText = "max-height:min(560px,70vh);overflow:auto;font:13px/1.45 sans-serif";
 
   const panelStyle = document.createElement("style");
   panelStyle.id = "creality-cfs-status-style";
@@ -106,7 +106,7 @@ CFS_STATUS_SOURCE = r'''(() => {
   document.head.appendChild(panelStyle);
 
   const header = document.createElement("div");
-  header.className = "v-card__title creality-cfs-header";
+  header.className = "v-card__title collapsable-card-title card-heading creality-cfs-header";
   header.style.cssText = "padding:12px 14px";
   const title = document.createElement("div");
   title.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:700";
@@ -296,20 +296,34 @@ CFS_STATUS_SOURCE = r'''(() => {
   };
 
   refreshButton.addEventListener("click", refresh);
+  const syncThemeClass = () => {
+    const app = document.querySelector(".v-application");
+    if (!app) return;
+    panel.classList.toggle("theme--dark", app.classList.contains("theme--dark"));
+    panel.classList.toggle("theme--light", app.classList.contains("theme--light"));
+  };
   const findDashboardContainer = () => {
     const path = String(window.location.pathname || "").replace(/\/+$/, "");
     const hash = String(window.location.hash || "").replace(/\?.*$/, "").replace(/\/+$/, "");
     if (path && path !== "/") return null;
     if (hash && hash !== "#" && hash !== "#!") return null;
-    const fluiddList = document.querySelector("main .app-draggable.list-group");
-    if (fluiddList) return fluiddList;
-    return document.querySelector("main");
+    const lists = [...document.querySelectorAll("main .app-draggable.list-group")];
+    return lists.find(list => [...list.children].some(card => {
+      const title = card.querySelector(".collapsable-card-title");
+      return title && title.textContent.trim() === "Macros";
+    })) || lists[0] || null;
   };
   const mount = () => {
     if (document.getElementById(rootId)) return true;
     const container = findDashboardContainer();
     if (!container) return false;
-    container.appendChild(panel);
+    const macroCard = [...container.children].find(card => {
+      const title = card.querySelector(".collapsable-card-title");
+      return title && title.textContent.trim() === "Macros";
+    });
+    if (macroCard) container.insertBefore(panel, macroCard);
+    else container.appendChild(panel);
+    syncThemeClass();
     refresh();
     if (!pollTimer) pollTimer = window.setInterval(refresh, 10000);
     return true;
@@ -325,6 +339,7 @@ CFS_STATUS_SOURCE = r'''(() => {
   const syncMount = () => {
     if (findDashboardContainer()) {
       mount();
+      syncThemeClass();
     } else {
       unmount();
     }
@@ -338,6 +353,9 @@ CFS_STATUS_SOURCE = r'''(() => {
     observer = new MutationObserver(syncMount);
     observer.observe(document.body, { childList: true, subtree: true });
   }
+  const themeObserver = new MutationObserver(syncThemeClass);
+  const appElement = document.querySelector(".v-application");
+  if (appElement) themeObserver.observe(appElement, { attributes: true, attributeFilter: ["class"] });
 })();
 '''
 
