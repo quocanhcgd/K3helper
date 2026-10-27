@@ -42,9 +42,18 @@ try:
     ]
     packages = [moonraker]
     try:
-        packages.append(importlib.import_module("moonraker.components"))
+        components_package = importlib.import_module("moonraker.components")
+        packages.append(components_package)
     except (ImportError, ModuleNotFoundError):
         pass
+    for package in packages:
+        candidate = getattr(package, "FileManager", None)
+        if candidate is not None and hasattr(candidate, "check_reserved_path"):
+            file_manager_class = candidate
+            logging.info("K3 Helper found Moonraker FileManager in %s", package.__name__)
+            break
+    if file_manager_class is not None:
+        packages = []
     for package in packages:
         package_path = getattr(package, "__path__", ())
         try:
