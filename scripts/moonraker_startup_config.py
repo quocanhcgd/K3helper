@@ -31,23 +31,35 @@ def inject_pythonpath(content):
         else:
             content = PYTHONPATH_LINE + line_end + content
 
-    # procd does not inherit an export added to the init script's shell.
-    # Explicitly pass the path to the supervised Moonraker process.
-    if PROCD_PYTHONPATH_LINE in content or "procd_set_param" not in content:
+    if "procd_set_param" not in content:
         return content
+
     line_end = "\r\n" if "\r\n" in content else "\n"
     marker = "procd_open_instance"
     position = content.find(marker)
-    if position >= 0:
+    if position >= 0 and PROCD_PYTHONPATH_LINE not in content:
         line_end_position = content.find("\n", position)
         if line_end_position >= 0:
-            return (
+            content = (
                 content[: line_end_position + 1]
                 + "\t"
                 + PROCD_PYTHONPATH_LINE
                 + line_end
                 + content[line_end_position + 1 :]
             )
+
+    # The K3 init script's procd env parameter is not reflected in the
+    # supervised process environment. Put env(1) directly in the command so
+    # the variable is set immediately before exec'ing Moonraker.
+    command_pattern = re.compile(r"(?m)^(\s*procd_set_param\s+command\s+)(?!/usr/bin/env\s+PYTHONPATH=)(.*)$")
+    content = command_pattern.sub(
+        lambda match: match.group(1)
+        + "/usr/bin/env PYTHONPATH="
+        + HELPER_PYTHONPATH
+        + " "
+        + match.group(2),
+        content,
+    )
     return content
 
 
