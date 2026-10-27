@@ -41,7 +41,9 @@ class SpoolmanBridge:
             self._spool_id,
         )
         self.server.register_endpoint(
-            "/server/spoolman/proxy", RequestType.POST, self._proxy
+            "/server/spoolman/proxy",
+            RequestType.GET | RequestType.POST,
+            self._proxy,
         )
 
     async def component_init(self):

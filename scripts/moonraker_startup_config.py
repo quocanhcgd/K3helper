@@ -2,6 +2,7 @@
 """Patch or restore the K3 Moonraker init script's config path."""
 
 import os
+import glob
 import re
 import shutil
 import sys
@@ -18,8 +19,23 @@ SERVICE_CANDIDATES = (
 )
 
 
+def inject_pythonpath(content):
+    """Add PYTHONPATH without moving a shell script's required shebang."""
+    if PYTHONPATH_LINE in content:
+        return content
+    line_end = "\r\n" if "\r\n" in content else "\n"
+    if content.startswith("#!"):
+        first_end = content.find("\n")
+        if first_end >= 0:
+            return content[: first_end + 1] + PYTHONPATH_LINE + line_end + content[first_end + 1 :]
+    return PYTHONPATH_LINE + line_end + content
+
+
 def service_paths(candidates=None):
-    candidates = SERVICE_CANDIDATES if candidates is None else candidates
+    if candidates is None:
+        candidates = list(SERVICE_CANDIDATES)
+        for directory in ("/etc/init.d", "/etc/rc.d"):
+            candidates.extend(sorted(glob.glob(os.path.join(directory, "*moonraker*"))))
     seen = set()
     for candidate in candidates:
         if not os.path.isfile(candidate):
@@ -81,7 +97,13 @@ def patch(config_path, candidates=None):
     if not os.path.exists(backup):
         shutil.copy2(path, backup)
     updated = content.replace(STOCK_CONFIG, config_path)
-    if updated == content:
+    updated = re.sub(
+        r"(?P<prefix>(?:-c|--config(?:file|-file))\s+)(?:['\"])?%s(?:['\"])?" % re.escape(STOCK_CONFIG),
+        lambda match: match.group("prefix") + config_path,
+        updated,
+    )
+    config_changed = updated != content
+    if not config_changed:
         # Some Creality init variants store the path in a differently named
         # variable while retaining the .conf suffix.
         updated = re.sub(
@@ -90,9 +112,7 @@ def patch(config_path, candidates=None):
             content,
             count=1,
         )
-    if PYTHONPATH_LINE not in updated:
-        line_end = "\r\n" if "\r\n" in updated else "\n"
-        updated = PYTHONPATH_LINE + line_end + updated
+    updated = inject_pythonpath(updated)
     if updated == content:
         raise RuntimeError("Moonraker startup config path was not changed")
     atomic_write(path, updated, os.stat(path).st_mode & 0o777)
@@ -106,16 +126,20 @@ def patch_all(config_path, candidates=None):
         if not os.path.exists(backup):
             shutil.copy2(path, backup)
         updated = content.replace(STOCK_CONFIG, config_path)
-        if updated == content:
+        updated = re.sub(
+            r"(?P<prefix>(?:-c|--config(?:file|-file))\s+)(?:['\"])?%s(?:['\"])?" % re.escape(STOCK_CONFIG),
+            lambda match: match.group("prefix") + config_path,
+            updated,
+        )
+        config_changed = updated != content
+        if not config_changed:
             updated = re.sub(
                 r"(?m)^(\s*(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*['\"]?)[^'\"\r\n]*moonraker\.conf(['\"]?\s*)$",
                 lambda match: match.group(1) + config_path + match.group(2),
                 content,
                 count=1,
             )
-        if PYTHONPATH_LINE not in updated:
-            line_end = "\r\n" if "\r\n" in updated else "\n"
-            updated = PYTHONPATH_LINE + line_end + updated
+        updated = inject_pythonpath(updated)
         if updated == content:
             raise RuntimeError("Moonraker startup config path was not changed in %s" % path)
         atomic_write(path, updated, os.stat(path).st_mode & 0o777)

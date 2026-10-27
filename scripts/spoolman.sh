@@ -91,6 +91,23 @@ check_k3_config() {
     log_info "Using active Moonraker config: $MOONRAKER_CONF"
 }
 
+config_status() {
+    check_k3_config || return 1
+    echo "[INFO] Resolved Moonraker config: $MOONRAKER_CONF"
+    echo "[INFO] Config directory: $(dirname "$MOONRAKER_CONF")"
+    if [ -f "$MOONRAKER_CONF" ]; then
+        echo "[INFO] Config is readable: yes"
+        grep -n -A4 -B1 '^\[spoolman\]' "$MOONRAKER_CONF" 2>/dev/null || true
+    else
+        echo "[INFO] Config is readable: no (wrapper will be created during install)"
+    fi
+    if [ -w "$(dirname "$MOONRAKER_CONF")" ]; then
+        echo "[INFO] Config directory is writable: yes"
+    else
+        echo "[INFO] Config directory is writable: no"
+    fi
+}
+
 check_moonraker() {
     python3 - <<'PY'
 import json
@@ -150,6 +167,8 @@ PY
 }
 
 diagnose_spoolman() {
+    echo "[INFO] Moonraker config access:"
+    config_status || true
     echo "[INFO] Moonraker component/config status:"
     python3 - <<'PY'
 import json
@@ -276,5 +295,6 @@ case "$1" in
     install|configure) install_spoolman ;;
     remove) remove_spoolman ;;
     status|diagnose) diagnose_spoolman ;;
+    config-status) config_status ;;
     *) echo "Usage: $0 [install|configure|remove|status]"; exit 2 ;;
 esac

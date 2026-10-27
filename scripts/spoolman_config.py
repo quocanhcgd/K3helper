@@ -27,7 +27,16 @@ def update_config(path, action, server=None):
                 target.flush()
                 os.fsync(target.fileno())
             os.chmod(temporary, 0o644)
-            os.replace(temporary, path)
+            try:
+                os.replace(temporary, path)
+            except OSError:
+                with open(path, "w", encoding="utf-8", newline="") as target:
+                    with open(temporary, "r", encoding="utf-8", newline="") as source:
+                        target.write(source.read())
+                    target.flush()
+                    os.fsync(target.fileno())
+                os.chmod(path, 0o644)
+                os.unlink(temporary)
         except Exception:
             try:
                 os.unlink(temporary)
@@ -66,7 +75,16 @@ def update_config(path, action, server=None):
             target.flush()
             os.fsync(target.fileno())
         os.chmod(temporary, mode)
-        os.replace(temporary, path)
+        try:
+            os.replace(temporary, path)
+        except OSError:
+            with open(path, "w", encoding="utf-8", newline="") as target:
+                with open(temporary, "r", encoding="utf-8", newline="") as source:
+                    target.write(source.read())
+                target.flush()
+                os.fsync(target.fileno())
+            os.chmod(path, mode)
+            os.unlink(temporary)
     except Exception:
         try:
             os.unlink(temporary)

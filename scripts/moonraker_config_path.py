@@ -12,11 +12,12 @@ DEFAULT_CANDIDATES = (
     "/mnt/UDISK/printer_data/config/moonraker.conf",
 )
 PERSISTENT_CONFIG_DIRS = (
-    "/mnt/UDISK/printer_data/config",
     "/mnt/SDCARD/cxsw/printer_data/config",
+    "/mnt/UDISK/printer_data/config",
 )
 STOCK_CONFIG = "/usr/share/moonraker/moonraker.conf"
 CONFIG_OPTIONS = ("-c", "--configfile", "--config-file")
+CONFIG_ENV_NAMES = ("MOONRAKER_CONFIG", "MOONRAKER_CONFIG_FILE", "CONFIG_FILE", "CONF")
 
 
 def process_config(proc_root="/proc"):
@@ -35,6 +36,26 @@ def process_config(proc_root="/proc"):
                 prefix = option + "="
                 if arg.startswith(prefix):
                     return arg[len(prefix):]
+        for arg in args:
+            if arg.endswith(".conf") and (arg == STOCK_CONFIG or "moonraker" in os.path.basename(arg).lower()):
+                return arg
+        try:
+            with open(os.path.join(os.path.dirname(cmdline), "environ"), "rb") as source:
+                environment = source.read().split(b"\0")
+        except OSError:
+            environment = []
+        for item in environment:
+            text = item.decode("utf-8", "replace")
+            name, separator, value = text.partition("=")
+            if separator and name in CONFIG_ENV_NAMES and value.endswith(".conf"):
+                return value
+        for descriptor in glob.glob(os.path.join(os.path.dirname(cmdline), "fd", "*")):
+            try:
+                target = os.path.realpath(descriptor)
+            except OSError:
+                continue
+            if target.endswith("moonraker.conf"):
+                return target
     return None
 
 
@@ -49,6 +70,8 @@ def resolve_config(proc_root="/proc", candidates=DEFAULT_CANDIDATES):
     for candidate in candidates:
         if os.path.isfile(candidate):
             return candidate
+    if os.path.isfile(STOCK_CONFIG):
+        return STOCK_CONFIG
     raise RuntimeError("No Moonraker config found in the running process or known K3 data paths")
 
 
