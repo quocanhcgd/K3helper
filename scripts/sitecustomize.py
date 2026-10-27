@@ -11,6 +11,13 @@ try:
     if component_path not in components.__path__:
         components.__path__.append(component_path)
 
+    # Creality's trimmed loader imports optional modules as components.X
+    # rather than moonraker.components.X.
+    top_components = importlib.import_module("components")
+    top_component_path = os.path.join(os.path.dirname(__file__), "components")
+    if top_component_path not in top_components.__path__:
+        top_components.__path__.append(top_component_path)
+
     # Distro-installed Moonraker may report /usr/share as its source root,
     # which also contains Klipper's registered docs root. That makes the
     # file manager reject its own docs directory as a reserved Moonraker path.
