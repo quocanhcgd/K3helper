@@ -4,6 +4,8 @@ import importlib
 import logging
 import os
 import pathlib
+import sys
+import types
 
 try:
     components = importlib.import_module("moonraker.components")
@@ -13,7 +15,12 @@ try:
 
     # Creality's trimmed loader imports optional modules as components.X
     # rather than moonraker.components.X.
-    top_components = importlib.import_module("components")
+    try:
+        top_components = importlib.import_module("components")
+    except ModuleNotFoundError:
+        top_components = types.ModuleType("components")
+        top_components.__path__ = []
+        sys.modules["components"] = top_components
     top_component_path = os.path.join(os.path.dirname(__file__), "components")
     if top_component_path not in top_components.__path__:
         top_components.__path__.append(top_component_path)
