@@ -12,6 +12,7 @@ import tempfile
 STOCK_CONFIG = "/usr/share/moonraker/moonraker.conf"
 HELPER_PYTHONPATH = "/mnt/UDISK/helper-script/scripts"
 PYTHONPATH_LINE = "export PYTHONPATH=%s${PYTHONPATH:+:$PYTHONPATH}" % HELPER_PYTHONPATH
+PROCD_PYTHONPATH_LINE = "procd_set_param env PYTHONPATH=%s" % HELPER_PYTHONPATH
 SERVICE_CANDIDATES = (
     "/etc/init.d/moonraker",
     "/etc/init.d/S56moonraker",
@@ -20,15 +21,34 @@ SERVICE_CANDIDATES = (
 
 
 def inject_pythonpath(content):
-    """Add PYTHONPATH without moving a shell script's required shebang."""
-    if PYTHONPATH_LINE in content:
+    """Add PYTHONPATH for both shell-launched and procd-launched services."""
+    if PYTHONPATH_LINE not in content:
+        line_end = "\r\n" if "\r\n" in content else "\n"
+        if content.startswith("#!"):
+            first_end = content.find("\n")
+            if first_end >= 0:
+                content = content[: first_end + 1] + PYTHONPATH_LINE + line_end + content[first_end + 1 :]
+        else:
+            content = PYTHONPATH_LINE + line_end + content
+
+    # procd does not inherit an export added to the init script's shell.
+    # Explicitly pass the path to the supervised Moonraker process.
+    if PROCD_PYTHONPATH_LINE in content or "procd_set_param" not in content:
         return content
     line_end = "\r\n" if "\r\n" in content else "\n"
-    if content.startswith("#!"):
-        first_end = content.find("\n")
-        if first_end >= 0:
-            return content[: first_end + 1] + PYTHONPATH_LINE + line_end + content[first_end + 1 :]
-    return PYTHONPATH_LINE + line_end + content
+    marker = "procd_open_instance"
+    position = content.find(marker)
+    if position >= 0:
+        line_end_position = content.find("\n", position)
+        if line_end_position >= 0:
+            return (
+                content[: line_end_position + 1]
+                + "\t"
+                + PROCD_PYTHONPATH_LINE
+                + line_end
+                + content[line_end_position + 1 :]
+            )
+    return content
 
 
 def service_paths(candidates=None):
