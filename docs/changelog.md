@@ -1,5 +1,12 @@
 # Changelog
 
+## K3 CFS Slot Mapping Research — October 27, 2026
+
+### Documented
+- Reviewed Creality Print v7.3.0's filament mapping and send-to-printer workflow. Its `color_match_info` maps logical print filaments to physical CFS slots as separate job metadata; the source does not show the selected slot being written directly into G-code.
+- Recorded that Creality Print's LAN path uses its own `send_print_cmd` flow and that this does not establish a matching Moonraker API on K3. Fluidd's CFS panel therefore remains read-only until the firmware's supported mapping interface is verified.
+- Added [CFS Slot Mapping on K3](helper-script/cfs-slot-mapping-k3.md) with source references and implementation requirements.
+
 ## K3 Spoolman Integration — October 27, 2026
 
 ### Added
