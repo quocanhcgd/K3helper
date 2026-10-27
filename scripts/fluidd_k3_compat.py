@@ -84,108 +84,221 @@ CFS_STATUS_SOURCE = r'''(() => {
 
   const panel = document.createElement("section");
   panel.id = rootId;
-  panel.style.cssText = "position:fixed;left:12px;bottom:44px;z-index:10000;width:min(300px,calc(100vw - 24px));color:#f4f5f6;background:rgba(32,36,40,.94);border:1px solid rgba(255,255,255,.18);border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.3);font:12px/1.45 sans-serif";
+  panel.style.cssText = "grid-column:1/-1;width:100%;max-height:min(560px,70vh);overflow:auto;color:#f4f5f6;background:#202428;border:1px solid rgba(255,255,255,.18);border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.2);font:13px/1.45 sans-serif;margin:12px 0";
 
-  const toggle = document.createElement("button");
-  toggle.type = "button";
-  toggle.setAttribute("aria-expanded", "false");
-  toggle.style.cssText = "display:flex;align-items:center;gap:8px;width:100%;min-height:32px;padding:6px 9px;border:0;background:transparent;color:inherit;text-align:left;font:600 12px/1.4 sans-serif;cursor:pointer";
+  const header = document.createElement("div");
+  header.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.14)";
+  const title = document.createElement("div");
+  title.style.cssText = "display:flex;align-items:center;gap:8px;font-weight:700";
   const dot = document.createElement("span");
-  dot.style.cssText = "width:8px;height:8px;flex:none;border-radius:50%;background:#8b9298";
+  dot.style.cssText = "width:9px;height:9px;flex:none;border-radius:50%;background:#8b9298";
   const summary = document.createElement("span");
   summary.textContent = "CFS: checking";
-  toggle.append(dot, summary);
+  title.append(dot, summary);
+  const refreshButton = document.createElement("button");
+  refreshButton.type = "button";
+  refreshButton.textContent = "Refresh";
+  refreshButton.style.cssText = "min-height:30px;padding:5px 10px;border:1px solid rgba(255,255,255,.2);border-radius:4px;background:#2d3338;color:#fff;cursor:pointer";
+  header.append(title, refreshButton);
 
-  const details = document.createElement("div");
-  details.hidden = true;
-  details.style.cssText = "padding:0 9px 8px;border-top:1px solid rgba(255,255,255,.14)";
-  toggle.addEventListener("click", () => {
-    details.hidden = !details.hidden;
-    toggle.setAttribute("aria-expanded", String(!details.hidden));
-  });
-  panel.append(toggle, details);
+  const metrics = document.createElement("div");
+  metrics.style.cssText = "display:flex;gap:18px;padding:10px 14px;color:#c9d0d5;border-bottom:1px solid rgba(255,255,255,.1)";
+  const temperature = document.createElement("span");
+  const humidity = document.createElement("span");
+  temperature.textContent = "Temp: --";
+  humidity.textContent = "Humidity: --";
+  metrics.append(temperature, humidity);
 
-  const setState = (text, color, lines) => {
-    summary.textContent = text;
-    dot.style.background = color;
-    details.replaceChildren();
-    for (const item of lines) {
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:center;gap:6px;padding-top:5px;overflow-wrap:anywhere";
-      if (item.color) {
-        const swatch = document.createElement("span");
-        swatch.setAttribute("aria-label", "Filament color #" + item.color);
-        swatch.style.cssText = "width:12px;height:12px;flex:none;border:1px solid rgba(255,255,255,.55);border-radius:2px;background:#" + item.color;
-        row.appendChild(swatch);
-      }
-      const label = document.createElement("span");
-      label.textContent = item.text;
-      row.appendChild(label);
-      details.appendChild(row);
-    }
-  };
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px 14px";
+  const detail = document.createElement("div");
+  detail.style.cssText = "display:none;padding:10px 14px 14px;border-top:1px solid rgba(255,255,255,.1);color:#c9d0d5;overflow-wrap:anywhere";
+  panel.append(header, metrics, grid, detail);
+
+  let slots = [];
+  let selectedSlot = "";
+  let refreshInFlight = false;
+  let pollTimer = null;
 
   const displayCode = value => {
     if (value === undefined || value === null || value === "" || value === "-1") return "";
     return String(value);
   };
+  const normalizeColor = value => {
+    let raw = displayCode(value).trim().toLowerCase().replace(/^0x/, "").replace(/^#/, "");
+    if (raw.length === 8) raw = raw.slice(-6);
+    if (raw.length > 6) raw = raw.slice(-6);
+    return /^[0-9a-f]{6}$/.test(raw) ? "#" + raw : "#69737d";
+  };
+  const valueOrDash = value => displayCode(value) || "--";
+
+  const renderDetail = slot => {
+    detail.replaceChildren();
+    if (!slot) {
+      detail.style.display = "none";
+      return;
+    }
+    detail.style.display = "block";
+    const lines = [
+      slot.slot + " · " + (slot.present ? (slot.name || slot.type || "material") : "empty"),
+      "Vendor: " + valueOrDash(slot.vendor),
+      "RFID: " + valueOrDash(slot.rfid),
+      "Remaining: " + (slot.remaining ? slot.remaining + " mm" : "--"),
+      "State: " + (slot.selected ? "loaded" : (slot.present ? "available" : "empty")),
+    ];
+    for (const line of lines) {
+      const row = document.createElement("div");
+      row.textContent = line;
+      row.style.paddingTop = "3px";
+      detail.appendChild(row);
+    }
+  };
+
+  const render = (online, loadedCount) => {
+    summary.textContent = "CFS: " + (online ? "online" : "offline") + " · " + loadedCount + " slot(s)";
+    dot.style.background = online ? "#39b86b" : "#d85c5c";
+    grid.replaceChildren();
+    for (const slot of slots) {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.style.cssText = "display:flex;align-items:center;gap:9px;min-width:0;min-height:68px;padding:9px;border:1px solid " + (slot.selected ? normalizeColor(slot.color) : "rgba(255,255,255,.14)") + ";border-radius:5px;background:" + (slot.present ? "#292f34" : "#24282c") + ";color:#f4f5f6;text-align:left;cursor:pointer;opacity:" + (slot.present ? "1" : ".65");
+      const swatch = document.createElement("span");
+      swatch.style.cssText = "width:26px;height:26px;flex:none;border-radius:50%;background:" + normalizeColor(slot.color) + ";border:2px solid rgba(255,255,255,.4);box-shadow:inset 0 0 0 4px rgba(0,0,0,.12)";
+      const text = document.createElement("span");
+      text.style.cssText = "display:flex;flex-direction:column;min-width:0;overflow:hidden";
+      const name = document.createElement("strong");
+      name.textContent = slot.slot + (slot.selected ? " · loaded" : "");
+      name.style.whiteSpace = "nowrap";
+      name.style.overflow = "hidden";
+      name.style.textOverflow = "ellipsis";
+      const material = document.createElement("span");
+      material.textContent = slot.present ? (slot.name || slot.type || "material") : "empty";
+      material.style.cssText = "color:#b9c1c7;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+      text.append(name, material);
+      card.append(swatch, text);
+      card.addEventListener("click", () => {
+        selectedSlot = selectedSlot === slot.slot ? "" : slot.slot;
+        renderDetail(slots.find(item => item.slot === selectedSlot));
+      });
+      grid.appendChild(card);
+    }
+    renderDetail(slots.find(item => item.slot === selectedSlot));
+  };
+
+  const parseBox = box => {
+    const units = Object.keys(box).filter(key => /^T[1-4]$/.test(key) && box[key] && typeof box[key] === "object");
+    const result = [];
+    const materialBySlot = new Map();
+    if (Array.isArray(box.same_material)) {
+      for (const item of box.same_material) {
+        if (!Array.isArray(item) || !Array.isArray(item[2])) continue;
+        for (const slot of item[2]) {
+          materialBySlot.set(String(slot), {
+            color: displayCode(item[1]),
+            name: displayCode(item[3]),
+            materialId: displayCode(item[0]),
+          });
+        }
+      }
+    }
+    for (const unitName of units) {
+      const unit = box[unitName];
+      const types = Array.isArray(unit.material_type) ? unit.material_type : [];
+      const names = Array.isArray(unit.material_name) ? unit.material_name : [];
+      const vendors = Array.isArray(unit.vendor) ? unit.vendor : (Array.isArray(unit.vender) ? unit.vender : []);
+      const colors = Array.isArray(unit.color_value) ? unit.color_value : [];
+      const rfids = Array.isArray(unit.rfid) ? unit.rfid : [];
+      const remaining = Array.isArray(unit.remain_len) ? unit.remain_len : [];
+      const selected = Array.isArray(unit.selected) ? unit.selected : [];
+      const length = Math.max(4, types.length, names.length, colors.length, rfids.length, remaining.length, selected.length);
+      for (let index = 0; index < Math.min(4, length); index++) {
+        const slotName = unitName + String.fromCharCode(65 + index);
+        const known = materialBySlot.get(slotName) || {};
+        const type = displayCode(types[index]);
+        const name = displayCode(names[index]) || known.name;
+        const color = displayCode(colors[index]) || known.color;
+        result.push({
+          slot: slotName,
+          type,
+          name,
+          vendor: displayCode(vendors[index]) === "unknown" ? "" : displayCode(vendors[index]),
+          color,
+          rfid: displayCode(rfids[index]),
+          remaining: displayCode(remaining[index]),
+          selected: Number(selected[index]) === 1 || unit.filament === slotName,
+          present: Boolean(type && type !== "-1" || name || color && color !== "-1" || rfids[index] && rfids[index] !== "-1"),
+        });
+      }
+    }
+    return result;
+  };
 
   const refresh = async () => {
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    refreshButton.disabled = true;
     try {
       const response = await fetch("/printer/objects/query?box", { cache: "no-store" });
       if (!response.ok) throw new Error("Moonraker API " + response.status);
       const payload = await response.json();
       const box = payload?.result?.status?.box;
       if (!box) throw new Error("CFS status unavailable");
-
-      const units = Object.keys(box).filter(key => /^T[1-4]$/.test(key) && box[key] && typeof box[key] === "object");
+      slots = parseBox(box);
       const online = box.is_online === true || box.state === "connect";
-      const lines = [];
-      let loaded = 0;
-      for (const unitName of units) {
-        const unit = box[unitName];
-        lines.push({ text: unitName + " · " + (unit.type || "CFS") });
-        const types = Array.isArray(unit.material_type) ? unit.material_type : [];
-        const colors = Array.isArray(unit.color_value) ? unit.color_value : [];
-        const remaining = Array.isArray(unit.remain_len) ? unit.remain_len : [];
-        for (let index = 0; index < Math.max(types.length, colors.length); index++) {
-          const slot = unitName + String.fromCharCode(65 + index);
-          const materialCode = displayCode(types[index]);
-          const colorCode = displayCode(colors[index]);
-          const match = Array.isArray(box.same_material) && box.same_material.find(item =>
-            Array.isArray(item) && Array.isArray(item[2]) && item[2].includes(slot)
-          );
-          const materialName = match && typeof match[3] === "string" ? match[3] : materialCode;
-          const isEmpty = !materialCode && !colorCode;
-          const remainder = remaining[index] && remaining[index] !== "-1" ? " · " + remaining[index] + " mm" : "";
-          lines.push({
-            text: slot + ": " + (isEmpty ? "empty" : (materialName || "material") + remainder),
-            color: colorCode ? colorCode.slice(-6) : "",
-          });
-          if (!isEmpty) loaded++;
-        }
-      }
-
-      if (!units.length) {
-        const rack = box.filament === 1 ? " · external spool detected" : "";
-        setState(online ? "CFS: online" : "CFS: unavailable", online ? "#39b86b" : "#e0a23c", [{ text: "No CFS unit details reported" + rack }]);
-        return;
-      }
-
-      setState("CFS: " + (online ? "online" : "offline") + " · " + loaded + " slot(s)", online ? "#39b86b" : "#d85c5c", lines);
+      const loadedCount = slots.filter(slot => slot.present).length;
+      const firstUnitName = Object.keys(box).find(key => /^T[1-4]$/.test(key) && box[key] && typeof box[key] === "object");
+      const firstUnit = firstUnitName ? box[firstUnitName] : {};
+      const reportedTemp = box.temp ?? firstUnit.temperature;
+      const reportedHumidity = box.humidity ?? firstUnit.dry_and_humidity;
+      temperature.textContent = "Temp: " + valueOrDash(reportedTemp) + " C";
+      humidity.textContent = "Humidity: " + valueOrDash(reportedHumidity) + "%";
+      render(online, loadedCount);
     } catch (error) {
-      setState("CFS: unavailable", "#e0a23c", [{ text: "Moonraker did not return the Klipper box status" }]);
+      slots = [];
+      temperature.textContent = "Temp: --";
+      humidity.textContent = "Humidity: --";
+      summary.textContent = "CFS: unavailable";
+      dot.style.background = "#e0a23c";
+      grid.replaceChildren();
+      const message = document.createElement("div");
+      message.textContent = "Moonraker did not return the Klipper box status";
+      message.style.cssText = "grid-column:1/-1;color:#c9d0d5;padding:4px 0";
+      grid.appendChild(message);
+      renderDetail(null);
+    } finally {
+      refreshInFlight = false;
+      refreshButton.disabled = false;
     }
   };
 
-  const mount = () => {
-    if (!document.body || document.getElementById(rootId)) return;
-    document.body.appendChild(panel);
-    refresh();
-    window.setInterval(refresh, 10000);
+  refreshButton.addEventListener("click", refresh);
+  const findDashboardContainer = () => {
+    const fluiddList = document.querySelector("main .app-draggable.list-group");
+    if (fluiddList) return fluiddList;
+    return document.querySelector("main");
   };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", mount, { once: true });
-  else mount();
+  const mount = () => {
+    if (document.getElementById(rootId)) return true;
+    const container = findDashboardContainer();
+    if (!container) return false;
+    container.appendChild(panel);
+    refresh();
+    if (!pollTimer) pollTimer = window.setInterval(refresh, 10000);
+    return true;
+  };
+  const tryMount = () => {
+    if (mount() && observer) {
+      observer.disconnect();
+      observer = null;
+    }
+  };
+  let observer = null;
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", tryMount, { once: true });
+  else tryMount();
+  if (!document.getElementById(rootId) && document.body) {
+    observer = new MutationObserver(tryMount);
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
 })();
 '''
 
