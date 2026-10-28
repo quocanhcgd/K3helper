@@ -62,7 +62,7 @@ def update_config(path, action, server=None):
         normalized = normalized[:start] + normalized[end:]
 
     if action == "set":
-        block = "[spoolman]\nserver: %s\nsync_rate: 5\n" % server
+        block = "[spoolman]\nserver: %s\n" % server
         normalized = normalized.rstrip() + "\n\n" + block
 
     output = normalized.replace("\n", newline)

@@ -21,6 +21,7 @@
 ### Fixed — October 28, 2026
 - Match Fluidd 1.37.7's Spoolman proxy V2 response envelope and return upstream HTTP errors in that envelope instead of converting them into generic Moonraker failures.
 - Register and emit Fluidd's active-spool and connection-status notifications, and persist the active spool ID through Moonraker's database when available.
+- Stop writing `sync_rate` to the K3 compatibility component's config because extrusion usage reporting is not implemented there.
 
 ## K3 Helper Script Self-Update and Fluidd Compatibility — October 27, 2026
 
