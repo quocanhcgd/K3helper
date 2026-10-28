@@ -11,25 +11,28 @@ COMPAT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(COMPAT)
 
 
-class FluiddK3ChamberLightTests(unittest.TestCase):
-    def test_install_is_idempotent_and_injects_websocket_control(self):
+class FluiddK3ChamberLightRemovalTests(unittest.TestCase):
+    def test_removes_retired_card_script_and_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             index = root / "index.html"
-            index.write_text("<html><body><main></main></body></html>", encoding="utf-8")
+            index.write_text(
+                '<html><head><script id="creality-chamber-light-script" '
+                'defer src="/creality-chamber-light.js?v=1"></script>'
+                "</head><body></body></html>",
+                encoding="utf-8",
+            )
+            script = root / "creality-chamber-light.js"
+            script.write_text("retired card code", encoding="utf-8")
 
-            COMPAT.install_chamber_light_display(root)
-            first_html = index.read_text(encoding="utf-8")
-            COMPAT.install_chamber_light_display(root)
-            second_html = index.read_text(encoding="utf-8")
-            script = (root / COMPAT.CHAMBER_LIGHT_SCRIPT).read_text(encoding="utf-8")
+            COMPAT.remove_chamber_light_display(root)
+            cleaned_html = index.read_text(encoding="utf-8")
+            COMPAT.remove_chamber_light_display(root)
 
-            self.assertEqual(first_html, second_html)
-            self.assertEqual(first_html.count(f'id="{COMPAT.CHAMBER_LIGHT_ID}"'), 1)
-            self.assertIn('new WebSocket(`${scheme}//${window.location.hostname}:9999/`)', script)
-            self.assertIn('JSON.stringify({ method: "set", params: { lightSw: value } })', script)
-            self.assertIn("panel.nextElementSibling !== macros", script)
-            self.assertNotIn('toggle.type = "checkbox"', script)
+            self.assertNotIn("creality-chamber-light-script", cleaned_html)
+            self.assertNotIn("creality-chamber-light.js", cleaned_html)
+            self.assertFalse(script.exists())
+            self.assertEqual(index.read_text(encoding="utf-8"), cleaned_html)
 
 
 if __name__ == "__main__":
