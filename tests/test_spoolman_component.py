@@ -66,6 +66,7 @@ class FakeConfig:
 class FakeWebRequest:
     def __init__(self, values):
         self.values = values
+        self.args = values
 
     def get_str(self, name, default=None):
         return self.values.get(name, default)
@@ -76,20 +77,21 @@ class FakeWebRequest:
     def get_boolean(self, name, default=False):
         return self.values.get(name, default)
 
+    def get_int(self, name, default=None):
+        value = self.values.get(name, default)
+        return None if value is None else int(value)
+
 
 class SpoolmanComponentTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         common = types.ModuleType("moonraker.common")
         common.RequestType = types.SimpleNamespace(GET=1, POST=2)
-        top_level_common = types.ModuleType("common")
-        top_level_common.RequestType = common.RequestType
         moonraker = types.ModuleType("moonraker")
         moonraker.__path__ = []
         moonraker.common = common
         sys.modules.setdefault("moonraker", moonraker)
         sys.modules["moonraker.common"] = common
-        sys.modules["common"] = top_level_common
         spec = importlib.util.spec_from_file_location("spoolman_component_test", MODULE_PATH)
         cls.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.module)
@@ -107,15 +109,21 @@ class SpoolmanComponentTests(unittest.TestCase):
             ],
         )
         self.assertIn("/server/spoolman/proxy", self.config.server.endpoints)
-        self.assertEqual(self.config.server.endpoints["/server/spoolman/proxy"][0], 2)
+        self.assertEqual(self.config.server.endpoints["/server/spoolman/proxy"][0], ["POST"])
+        self.assertEqual(self.config.server.endpoints["/server/spoolman/spool_id"][0], ["GET", "POST"])
 
-    def test_loads_with_creality_top_level_common_module(self):
+    def test_loads_without_moonraker_common_module(self):
         sys.modules.pop("moonraker.common", None)
         sys.modules.pop("moonraker", None)
         spec = importlib.util.spec_from_file_location("spoolman_component_top_level_test", MODULE_PATH)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.assertTrue(hasattr(module, "SpoolmanBridge"))
+
+    def test_k3_spool_id_post_detected_from_legacy_webrequest_args(self):
+        request = FakeWebRequest({"spool_id": "41"})
+        result = asyncio.run(self.bridge._spool_id(request))
+        self.assertEqual(result["spool_id"], 41)
 
     def test_proxy_uses_fluidd_v2_response_contract(self):
         self.bridge._request = lambda *args: ({"id": 2}, {"content-type": "application/json"}, 200)

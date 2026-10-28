@@ -17,9 +17,8 @@ from typing import Any, Dict, Optional
 try:
     from moonraker.common import RequestType
 except ImportError:
-    # Creality starts Moonraker with its source directory on sys.path and
-    # loads components as top-level modules rather than moonraker.components.
-    from common import RequestType
+    # Creality's trimmed Moonraker has no common.py and uses method-name lists.
+    RequestType = None
 
 
 class SpoolmanBridge:
@@ -45,15 +44,15 @@ class SpoolmanBridge:
 
     def _register_endpoints(self):
         self.server.register_endpoint(
-            "/server/spoolman/status", RequestType.GET, self._status
+            "/server/spoolman/status", ["GET"], self._status
         )
         self.server.register_endpoint(
             "/server/spoolman/spool_id",
-            RequestType.GET | RequestType.POST,
+            ["GET", "POST"],
             self._spool_id,
         )
         self.server.register_endpoint(
-            "/server/spoolman/proxy", RequestType.POST, self._proxy
+            "/server/spoolman/proxy", ["POST"], self._proxy
         )
 
     async def component_init(self):
@@ -82,7 +81,13 @@ class SpoolmanBridge:
             send_event(self._active_spool_notification, {"spool_id": self.spool_id})
 
     async def _spool_id(self, web_request):
-        if web_request.get_request_type() == RequestType.POST:
+        request_type = getattr(web_request, "get_request_type", None)
+        if request_type is not None:
+            is_post = request_type() == RequestType.POST
+        else:
+            args = getattr(web_request, "get_args", lambda: getattr(web_request, "args", {}))()
+            is_post = "spool_id" in args
+        if is_post:
             self.set_active_spool(web_request.get_int("spool_id", None))
         return {"spool_id": self.spool_id}
 
