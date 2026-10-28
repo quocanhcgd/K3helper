@@ -822,9 +822,13 @@ def patch_bundle(root: Path) -> None:
             thumbnail_matches.append((asset, text))
         if re.search(r"(?<![.$\w])createFileUrl\(\w+,\w+,\w+\)\{", text) and "/server/files/" in text:
             file_api_matches.append((asset, text))
-        if "async createFileUrlWithToken(" in text and "accessOneshotToken" in text:
+        if "async createFileUrlWithToken(" in text and (
+            "accessOneshotToken" in text or K3_ONESHOT_TOKEN_MARKER in text
+        ):
             token_matches.append((asset, text))
-        if "async serverFilesUploadPost(" in text and "accessOneshotToken" in text:
+        if "async serverFilesUploadPost(" in text and (
+            "accessOneshotToken" in text or K3_UPLOAD_ONESHOT_MARKER in text
+        ):
             upload_token_matches.append((asset, text))
 
     if not list_matches or not delete_matches:
