@@ -178,6 +178,9 @@ def patch_all(config_path, candidates=None):
             )
         updated = inject_pythonpath(updated)
         if updated == content:
+            if config_path in content:
+                patched.append(path)
+                continue
             raise RuntimeError("Moonraker startup config path was not changed in %s" % path)
         atomic_write(path, updated, os.stat(path).st_mode & 0o777)
         patched.append(path)

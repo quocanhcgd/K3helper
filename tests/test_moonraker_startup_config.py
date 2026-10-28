@@ -24,12 +24,12 @@ class MoonrakerStartupConfigTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = STARTUP.patch(
+            result = STARTUP.patch_all(
                 "/mnt/SDCARD/cxsw/printer_data/config/moonraker.conf",
                 candidates=[str(service)],
             )
 
-            self.assertEqual(result, str(service))
+            self.assertEqual(result, [str(service)])
             self.assertIn("PYTHONPATH=/mnt/UDISK/helper-script/scripts", service.read_text(encoding="utf-8"))
 
 
