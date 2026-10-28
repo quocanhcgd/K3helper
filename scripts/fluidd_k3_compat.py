@@ -57,6 +57,14 @@ K3_ONESHOT_TOKEN_METHOD = (
     "{credentials:`same-origin`});if(i.ok){let a=await i.json();"
     "if(a.result)return`${r}&token=${a.result}`}}catch{}return r}"
 )
+K3_UPLOAD_ONESHOT_MARKER = "k3-http-upload-oneshot-v1"
+K3_UPLOAD_ONESHOT_EXPRESSION = (
+    "this.isTrustedUser?null:await(async()=>{/* k3-http-upload-oneshot-v1 */"
+    "let r=await fetch(new URL(`/access/oneshot_token`,window.location.origin),"
+    "{credentials:`same-origin`});if(!r.ok)throw Error(`Moonraker upload token request failed: ${r.status}`);"
+    "let e=await r.json();if(!e.result)throw Error(`Moonraker did not return an upload token`);"
+    "return e.result})()"
+)
 LEGACY_FILE_DOWNLOAD = (
     "async downloadFile(e,t){let n=this.createFileUrl(e,t);"
     "try{let r=new URL(n);r.origin!==window.location.origin&&"
@@ -69,6 +77,9 @@ FIRMWARE_INFO_FILE = "creality-firmware-version.json"
 CFS_STATUS_ID = "creality-cfs-status-script"
 CFS_STATUS_SCRIPT = "creality-cfs-status.js"
 CFS_STATUS_VERSION = "4"
+CHAMBER_LIGHT_ID = "creality-chamber-light-script"
+CHAMBER_LIGHT_SCRIPT = "creality-chamber-light.js"
+CHAMBER_LIGHT_VERSION = "1"
 K3_THUMBNAIL_PATCH_MARKER = "k3-thumbnail-fallback-v2"
 REPRINT_THUMBNAILS_ID = "creality-reprint-thumbnails-script"
 REPRINT_THUMBNAILS_SCRIPT = "creality-reprint-thumbnails.js"
@@ -383,6 +394,170 @@ CFS_STATUS_SOURCE = r'''(() => {
 })();
 '''
 
+CHAMBER_LIGHT_SOURCE = r'''(() => {
+  const rootId = "creality-chamber-light-panel";
+  if (document.getElementById(rootId)) return;
+
+  const panel = document.createElement("section");
+  panel.id = rootId;
+  panel.className = "mb-2 mb-md-4 v-card v-sheet rounded-md collapsable-card creality-chamber-light-panel";
+  panel.style.cssText = "font:13px/1.45 sans-serif";
+
+  const style = document.createElement("style");
+  style.textContent = `
+    #${rootId} { color:inherit; }
+    #${rootId} .creality-light-header { display:flex;align-items:center;gap:8px;padding:12px 14px;font-weight:700; }
+    #${rootId} .creality-light-dot { width:9px;height:9px;flex:none;border-radius:50%;background:#8b9298; }
+    #${rootId} .creality-light-row { display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 14px; }
+    #${rootId} .creality-light-state { opacity:.72;font-size:12px; }
+    #${rootId} .creality-light-actions { display:flex;gap:6px; }
+    #${rootId} .creality-light-action { min-width:54px;padding:5px 12px;border:1px solid currentColor;border-radius:4px;background:transparent;color:inherit;cursor:pointer; }
+    #${rootId} .creality-light-action[aria-pressed="true"] { background:#3b9c67;color:#fff;border-color:#3b9c67; }
+    #${rootId} .creality-light-action:disabled { cursor:wait;opacity:.5; }
+    #${rootId} .creality-light-action:focus-visible { outline:2px solid #4d9de0;outline-offset:2px; }
+  `;
+  document.head.appendChild(style);
+
+  const header = document.createElement("div");
+  header.className = "v-card__title collapsable-card-title card-heading creality-light-header";
+  const dot = document.createElement("span");
+  dot.className = "creality-light-dot";
+  const title = document.createElement("span");
+  title.textContent = "Chamber light";
+  header.append(dot, title);
+
+  const row = document.createElement("div");
+  row.className = "v-card__text creality-light-row";
+  const state = document.createElement("span");
+  state.className = "creality-light-state";
+  state.textContent = "Connecting";
+  const actions = document.createElement("div");
+  actions.className = "creality-light-actions";
+  const buttons = [0, 1].map(value => {
+    const button = document.createElement("button");
+    button.className = "creality-light-action";
+    button.type = "button";
+    button.textContent = value ? "On" : "Off";
+    button.setAttribute("aria-label", `Turn chamber light ${value ? "on" : "off"}`);
+    button.setAttribute("aria-pressed", "false");
+    button.disabled = true;
+    button.addEventListener("click", () => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ method: "set", params: { lightSw: value } }));
+      state.textContent = `Command sent: ${value ? "On" : "Off"}`;
+    });
+    actions.appendChild(button);
+    return button;
+  });
+  row.append(state, actions);
+  panel.append(header, row);
+
+  let socket = null;
+  let lightState = null;
+  let reconnectTimer = null;
+  let retryDelay = 1000;
+  let mounted = false;
+
+  const render = () => {
+    const connected = socket && socket.readyState === WebSocket.OPEN;
+    dot.style.background = connected ? "#39b86b" : "#8b9298";
+    state.textContent = !connected ? "Disconnected" : lightState === null ? "Connected" : (lightState ? "On" : "Off");
+    buttons.forEach((button, index) => {
+      button.disabled = !connected;
+      button.setAttribute("aria-pressed", lightState === index ? "true" : "false");
+    });
+  };
+  const scheduleReconnect = () => {
+    if (reconnectTimer || !mounted) return;
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null;
+      connect();
+    }, retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 15000);
+  };
+  const connect = () => {
+    if (!mounted || socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) return;
+    const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+    socket = new WebSocket(`${scheme}//${window.location.hostname}:9999/`);
+    render();
+    socket.addEventListener("open", () => {
+      retryDelay = 1000;
+      render();
+    });
+    socket.addEventListener("message", event => {
+      try {
+        const payload = JSON.parse(event.data);
+        const value = payload && (payload.lightSw ?? payload.params?.lightSw ?? payload.result?.lightSw);
+        if (value === 0 || value === 1 || value === false || value === true) {
+          lightState = value === 1 || value === true;
+          render();
+        }
+      } catch {}
+    });
+    socket.addEventListener("close", () => {
+      socket = null;
+      lightState = null;
+      render();
+      scheduleReconnect();
+    });
+    socket.addEventListener("error", () => socket.close());
+  };
+
+  const findDashboard = () => {
+    const path = String(window.location.pathname || "").replace(/\/+$/, "");
+    const hash = String(window.location.hash || "").replace(/\?.*$/, "").replace(/\/+$/, "");
+    if (path && path !== "/") return null;
+    if (hash && hash !== "#" && hash !== "#!") return null;
+    const lists = [...document.querySelectorAll("main .app-draggable.list-group")];
+    return lists.find(list => [...list.children].some(card => {
+      const heading = card.querySelector(".collapsable-card-title");
+      return heading && heading.textContent.trim() === "Macros";
+    })) || lists[0] || null;
+  };
+  const mount = () => {
+    const dashboard = findDashboard();
+    if (!dashboard) return false;
+    const macros = [...dashboard.children].find(card => {
+      const heading = card.querySelector(".collapsable-card-title");
+      return heading && heading.textContent.trim() === "Macros";
+    });
+    if (macros) {
+      if (panel.parentElement !== dashboard || panel.nextElementSibling !== macros) {
+        dashboard.insertBefore(panel, macros);
+      }
+    } else if (panel.parentElement !== dashboard || panel !== dashboard.lastElementChild) {
+      dashboard.appendChild(panel);
+    }
+    mounted = true;
+    connect();
+    return true;
+  };
+  const unmount = () => {
+    mounted = false;
+    if (reconnectTimer) {
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (socket) {
+      const current = socket;
+      socket = null;
+      current.close();
+    }
+    panel.remove();
+  };
+  const syncMount = () => {
+    if (findDashboard()) mount();
+    else if (mounted) unmount();
+  };
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncMount, { once: true });
+  else syncMount();
+  window.addEventListener("hashchange", syncMount);
+  window.addEventListener("popstate", syncMount);
+  if (document.body) new MutationObserver(syncMount).observe(document.body, { childList: true, subtree: true });
+})();
+'''
+
 REPRINT_THUMBNAILS_SOURCE = r'''(() => {
   const run = () => {
     for (const table of document.querySelectorAll("table")) {
@@ -501,6 +676,29 @@ def install_cfs_status_display(root: Path) -> None:
             html = re.sub(r"</html\s*>", script_tag + "</html>", html, count=1, flags=re.IGNORECASE)
         else:
             raise RuntimeError("Fluidd index.html has no body or html closing tag for CFS status injection.")
+    index.write_text(html, encoding="utf-8")
+
+
+def install_chamber_light_display(root: Path) -> None:
+    (root / CHAMBER_LIGHT_SCRIPT).write_text(CHAMBER_LIGHT_SOURCE, encoding="utf-8")
+    index = root / "index.html"
+    html = index.read_text(encoding="utf-8")
+    script_tag = (
+        f'<script id="{CHAMBER_LIGHT_ID}" defer '
+        f'src="/{CHAMBER_LIGHT_SCRIPT}?v={CHAMBER_LIGHT_VERSION}"></script>'
+    )
+    existing_pattern = re.compile(
+        rf'<script\s+id=["\']{re.escape(CHAMBER_LIGHT_ID)}["\'][^>]*></script>',
+        re.IGNORECASE,
+    )
+    if existing_pattern.search(html):
+        html = existing_pattern.sub(script_tag, html, count=1)
+    elif re.search(r"</body\s*>", html, re.IGNORECASE):
+        html = re.sub(r"</body\s*>", script_tag + "</body>", html, count=1, flags=re.IGNORECASE)
+    elif re.search(r"</html\s*>", html, re.IGNORECASE):
+        html = re.sub(r"</html\s*>", script_tag + "</html>", html, count=1, flags=re.IGNORECASE)
+    else:
+        raise RuntimeError("Fluidd index.html has no body or html closing tag for chamber light control.")
     index.write_text(html, encoding="utf-8")
 
 
@@ -733,6 +931,51 @@ def patch_http_oneshot_token(text: str) -> tuple[str, bool]:
     return text[:start] + method + text[close_brace:], True
 
 
+def patch_http_upload_oneshot_token(text: str) -> tuple[str, bool]:
+    """Use Moonraker's HTTP token endpoint before uploading edited files."""
+    if K3_UPLOAD_ONESHOT_MARKER in text:
+        return text, False
+
+    marker = re.compile(r"(?<![.$\w])async serverFilesUploadPost\(([^)]*)\)\{")
+    match = marker.search(text)
+    if not match:
+        return text, False
+    start = match.start()
+    open_brace = match.end() - 1
+    depth = 0
+    quote = None
+    escaped = False
+    close_brace = -1
+    for position in range(open_brace, len(text)):
+        char = text[position]
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+        if char in "'\"`":
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                close_brace = position + 1
+                break
+    if close_brace < 0:
+        return text, False
+
+    method = text[start:close_brace]
+    token_call = re.compile(r"this\.isTrustedUser\?null:await\s+\w+\.accessOneshotToken\(\)")
+    method, count = token_call.subn(K3_UPLOAD_ONESHOT_EXPRESSION, method, count=1)
+    if count != 1:
+        return text, False
+    return text[:start] + method + text[close_brace:], True
+
+
 def patch_bundle(root: Path) -> None:
     list_matches = []
     delete_matches = []
@@ -740,6 +983,7 @@ def patch_bundle(root: Path) -> None:
     thumbnail_matches = []
     file_api_matches = []
     token_matches = []
+    upload_token_matches = []
     for asset in (root / "assets").glob("*.js"):
         text = asset.read_text(encoding="utf-8")
         if "setWebcamsList(" in text:
@@ -754,6 +998,8 @@ def patch_bundle(root: Path) -> None:
             file_api_matches.append((asset, text))
         if "async createFileUrlWithToken(" in text and "accessOneshotToken" in text:
             token_matches.append((asset, text))
+        if "async serverFilesUploadPost(" in text and "accessOneshotToken" in text:
+            upload_token_matches.append((asset, text))
 
     if not list_matches or not delete_matches:
         raise RuntimeError(
@@ -824,6 +1070,18 @@ def patch_bundle(root: Path) -> None:
                 f"Fluidd one-shot token code did not match a supported version: {token_asset.name}"
             )
         token_asset.write_text(token_text, encoding="utf-8")
+
+    if not upload_token_matches:
+        raise RuntimeError("Could not find Fluidd file-upload one-shot token module.")
+
+    for upload_asset, _ in upload_token_matches:
+        upload_text = upload_asset.read_text(encoding="utf-8")
+        upload_text, _ = patch_http_upload_oneshot_token(upload_text)
+        if K3_UPLOAD_ONESHOT_MARKER not in upload_text:
+            raise RuntimeError(
+                f"Fluidd file-upload token code did not match a supported version: {upload_asset.name}"
+            )
+        upload_asset.write_text(upload_text, encoding="utf-8")
 
     for download_asset, _ in download_matches:
         download_text = download_asset.read_text(encoding="utf-8")
@@ -1087,6 +1345,7 @@ def install(
         patch_bundle(destination)
     install_firmware_version_display(destination, version_file)
     install_cfs_status_display(destination)
+    install_chamber_light_display(destination)
     install_reprint_thumbnail_display(destination)
     ensure_custom_ui_directory(config_root)
     try:
