@@ -18,6 +18,10 @@
 - Add K3 menu option 26 to inspect the component, config, endpoints, and Moonraker import errors.
 - Documented that Spoolman runs on a separate host and does not control physical K3 CFS slot selection.
 
+### Fixed — October 28, 2026
+- Match Fluidd 1.37.7's Spoolman proxy V2 response envelope and return upstream HTTP errors in that envelope instead of converting them into generic Moonraker failures.
+- Register and emit Fluidd's active-spool and connection-status notifications, and persist the active spool ID through Moonraker's database when available.
+
 ## K3 Helper Script Self-Update and Fluidd Compatibility — October 27, 2026
 
 ### Added
