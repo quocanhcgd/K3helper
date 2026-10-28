@@ -14,7 +14,12 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional
 
-from moonraker.common import RequestType
+try:
+    from moonraker.common import RequestType
+except ImportError:
+    # Creality starts Moonraker with its source directory on sys.path and
+    # loads components as top-level modules rather than moonraker.components.
+    from common import RequestType
 
 
 class SpoolmanBridge:

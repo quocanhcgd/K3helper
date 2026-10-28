@@ -82,11 +82,14 @@ class SpoolmanComponentTests(unittest.TestCase):
     def setUpClass(cls):
         common = types.ModuleType("moonraker.common")
         common.RequestType = types.SimpleNamespace(GET=1, POST=2)
+        top_level_common = types.ModuleType("common")
+        top_level_common.RequestType = common.RequestType
         moonraker = types.ModuleType("moonraker")
         moonraker.__path__ = []
         moonraker.common = common
         sys.modules.setdefault("moonraker", moonraker)
         sys.modules["moonraker.common"] = common
+        sys.modules["common"] = top_level_common
         spec = importlib.util.spec_from_file_location("spoolman_component_test", MODULE_PATH)
         cls.module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.module)
@@ -105,6 +108,14 @@ class SpoolmanComponentTests(unittest.TestCase):
         )
         self.assertIn("/server/spoolman/proxy", self.config.server.endpoints)
         self.assertEqual(self.config.server.endpoints["/server/spoolman/proxy"][0], 2)
+
+    def test_loads_with_creality_top_level_common_module(self):
+        sys.modules.pop("moonraker.common", None)
+        sys.modules.pop("moonraker", None)
+        spec = importlib.util.spec_from_file_location("spoolman_component_top_level_test", MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertTrue(hasattr(module, "SpoolmanBridge"))
 
     def test_proxy_uses_fluidd_v2_response_contract(self):
         self.bridge._request = lambda *args: ({"id": 2}, {"content-type": "application/json"}, 200)
