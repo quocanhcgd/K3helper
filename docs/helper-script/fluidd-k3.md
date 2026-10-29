@@ -10,10 +10,13 @@ Fluidd update and repair applies the K3-specific compatibility changes:
 - Keeps K3 camera entries visible and supports the firmware's camera service.
 - Repairs file browsing, config editing, uploads, and downloads for the K3 Moonraker API and its one-shot HTTP tokens.
 - Restores G-code thumbnails in Jobs and Re-print lists where Moonraker metadata is missing.
+- Adds a K3 Moonraker compatibility component for Fluidd's optional peripheral calls and metadata rescan request. Unsupported firmware calls return safe empty results instead of `-32601 Method not found`.
 - Shows read-only CFS slot status on the dashboard. Slot selection for starting a print is not available through a verified K3 Moonraker API.
 - Shows the installed Creality firmware version and preserves Fluidd's custom UI settings directory.
 
 The compatibility setup is applied again on every repair. It does not replace printer configuration or Fluidd user settings.
+
+The repair also checks the running Moonraker component list. If `k3helper_compat` is missing, it adds a managed `[k3helper_compat]` section to the active writable Moonraker configuration, restarts Moonraker, and verifies that the component loaded. This removes noisy errors from Fluidd's optional `machine.peripherals.*` and `server.files.metascan` calls while preserving the real K3 camera and file APIs.
 
 ## Chamber light macro
 

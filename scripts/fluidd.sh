@@ -13,6 +13,11 @@ SCRIPT_DIR=/mnt/UDISK/helper-script
 FLUIDD_DIR=/usr/share/fluidd
 K3_FLUIDD_COMPAT=$SCRIPT_DIR/scripts/fluidd_k3_compat.py
 MOONRAKER_STARTUP_HELPER=$SCRIPT_DIR/scripts/moonraker_startup_config.py
+MOONRAKER_PATH_HELPER=$SCRIPT_DIR/scripts/moonraker_config_path.py
+MOONRAKER_WRAPPER_HELPER=$SCRIPT_DIR/scripts/spoolman_config.py
+MOONRAKER_COMPAT_CONFIG=$SCRIPT_DIR/scripts/moonraker_compat_config.py
+MOONRAKER_COMPAT_COMPONENT=$SCRIPT_DIR/scripts/moonraker_compat_component.py
+MOONRAKER_STOCK_CONF=/usr/share/moonraker/moonraker.conf
 if is_k3; then
     FLUIDD_DIR=$SCRIPT_DIR/fluidd
 fi
@@ -197,15 +202,84 @@ PYEOF
 }
 
 configure_fluidd_for_k3() {
-    if [ -f "$MOONRAKER_STARTUP_HELPER" ] && [ -x /etc/init.d/moonraker ]; then
-        python3 "$MOONRAKER_STARTUP_HELPER" patch-pythonpath >/dev/null 2>&1 || \
-            log_warn "Could not enable K3 Moonraker file-access compatibility."
-    fi
+    configure_moonraker_k3_compat || return 1
     python3 "$K3_FLUIDD_COMPAT" install \
         --source /usr/share/fluidd \
         --destination "$SCRIPT_DIR/fluidd" \
         --nginx "$NGINX_CONF" || return 1
     nginx -t
+}
+
+resolve_fluidd_moonraker_config() {
+    [ -f "$MOONRAKER_PATH_HELPER" ] || return 1
+    active=$(python3 "$MOONRAKER_PATH_HELPER") || return 1
+    case "$active" in
+        "$MOONRAKER_STOCK_CONF")
+            config=$(python3 "$MOONRAKER_PATH_HELPER" wrapper) || return 1
+            if [ ! -e "$config" ]; then
+                python3 "$MOONRAKER_WRAPPER_HELPER" init-wrapper "$config" "$MOONRAKER_STOCK_CONF" || return 1
+            fi
+            ;;
+        /mnt/SDCARD/*|/mnt/UDISK/*)
+            config=$active
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    [ -f "$config" ] || return 1
+    [ -w "$config" ] && [ -w "$(dirname "$config")" ] || return 1
+    MOONRAKER_ACTIVE_CONF=$config
+}
+
+moonraker_k3_compat_loaded() {
+    python3 - <<'PY'
+import json
+import urllib.request
+with urllib.request.urlopen("http://127.0.0.1:7125/server/info", timeout=3) as response:
+    result = json.loads(response.read().decode("utf-8")).get("result", {})
+if "k3helper_compat" not in result.get("components", []):
+    raise SystemExit(1)
+PY
+}
+
+configure_moonraker_k3_compat() {
+    [ -f "$MOONRAKER_STARTUP_HELPER" ] && [ -f "$MOONRAKER_COMPAT_CONFIG" ] && \
+        [ -f "$MOONRAKER_COMPAT_COMPONENT" ] || {
+        log_warn "K3 Moonraker compatibility files are missing."
+        return 1
+    }
+    resolve_fluidd_moonraker_config || {
+        log_warn "Could not resolve a writable Moonraker config for K3 compatibility."
+        return 1
+    }
+    python3 "$MOONRAKER_STARTUP_HELPER" patch-pythonpath >/dev/null 2>&1 || {
+        log_warn "Could not enable K3 Moonraker file-access compatibility."
+        return 1
+    }
+    if moonraker_k3_compat_loaded 2>/dev/null; then
+        return 0
+    fi
+    compat_backup=$MOONRAKER_ACTIVE_CONF.k3helper-compat.bak
+    if [ ! -e "$compat_backup" ]; then
+        cp -p "$MOONRAKER_ACTIVE_CONF" "$compat_backup" || return 1
+    fi
+    python3 "$MOONRAKER_COMPAT_CONFIG" install "$MOONRAKER_ACTIVE_CONF" || return 1
+    if ! restart_moonraker; then
+        cp -p "$compat_backup" "$MOONRAKER_ACTIVE_CONF"
+        restart_moonraker >/dev/null 2>&1
+        return 1
+    fi
+    attempt=0
+    while [ "$attempt" -lt 30 ]; do
+        moonraker_k3_compat_loaded 2>/dev/null && return 0
+        attempt=$((attempt + 1))
+        sleep 1
+    done
+    log_warn "Moonraker did not load the K3 Fluidd compatibility component."
+    cp -p "$compat_backup" "$MOONRAKER_ACTIVE_CONF"
+    restart_moonraker >/dev/null 2>&1
+    return 1
 }
 
 # ── Install / repair Fluidd ───────────────────────────────────────────────────
