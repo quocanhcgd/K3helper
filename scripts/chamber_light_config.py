@@ -15,19 +15,20 @@ from typing import Optional
 
 INCLUDE_MARKER = "# K3 Helper Script: chamber light macro"
 INCLUDE_LINE = "[include chamber_light.cfg]"
-MACRO_MARKER = "# K3HELPER_CHAMBER_LIGHT_V1"
-PIN_CONFIG = '''[output_pin chamber_led]
+MACRO_MARKER = "# K3HELPER_CHAMBER_LIGHT_V2"
+LEGACY_MACRO_MARKER = "# K3HELPER_CHAMBER_LIGHT_V1"
+PIN_CONFIG = '''[output_pin nozzle_light]
 pin: rpi:gpio42
 value: 0
 shutdown_value: 0
 '''
 MACROS_CONFIG = '''[gcode_macro CHAMBER_LED_ON]
 gcode:
-  SET_PIN PIN=chamber_led VALUE=1
+  SET_PIN PIN=nozzle_light VALUE=1
 
 [gcode_macro CHAMBER_LED_OFF]
 gcode:
-  SET_PIN PIN=chamber_led VALUE=0
+  SET_PIN PIN=nozzle_light VALUE=0
 '''
 
 
@@ -81,19 +82,30 @@ def manage_config(path: Path, action: str, objects: Optional[set[str]] = None) -
     normalized = text.replace("\r\n", "\n")
     managed_include = INCLUDE_MARKER + "\n" + INCLUDE_LINE
     already_included = managed_include in normalized
-    macro_is_owned = macro_path.is_file() and MACRO_MARKER in macro_path.read_text(encoding="utf-8")
+    macro_text = macro_path.read_text(encoding="utf-8") if macro_path.is_file() else ""
+    macro_is_owned = MACRO_MARKER in macro_text or LEGACY_MACRO_MARKER in macro_text
+    macro_is_current = MACRO_MARKER in macro_text
 
     if action == "install":
-        if already_included and macro_is_owned:
+        if already_included and macro_is_current:
             return False
+        if already_included and LEGACY_MACRO_MARKER in macro_text:
+            raise RuntimeError(
+                "The installed Helper macro targets chamber_led. Remove it, then install again to switch to nozzle_light."
+            )
         if INCLUDE_LINE in normalized or macro_path.exists():
             raise RuntimeError("chamber_light.cfg or its include already exists and is not Helper Script-owned.")
         objects = moonraker_objects() if objects is None else objects
+        if "output_pin chamber_led" in objects and "output_pin nozzle_light" not in objects:
+            raise RuntimeError(
+                "Klipper has output_pin chamber_led, but the Creality light control targets nozzle_light. "
+                "Rename the existing pin to nozzle_light before installing the macros."
+            )
         if "gcode_macro CHAMBER_LED_ON" in objects or "gcode_macro CHAMBER_LED_OFF" in objects:
             raise RuntimeError("A CHAMBER_LED_ON or CHAMBER_LED_OFF macro already exists; left existing macros unchanged.")
         backup_config(path)
         config = MACRO_MARKER + "\n"
-        if "output_pin chamber_led" not in objects:
+        if "output_pin nozzle_light" not in objects:
             config += PIN_CONFIG + "\n"
         config += MACROS_CONFIG
         macro_path.write_text(config.replace("\n", newline), encoding="utf-8", newline="")
