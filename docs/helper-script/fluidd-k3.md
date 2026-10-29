@@ -17,7 +17,9 @@ The compatibility setup is applied again on every repair. It does not replace pr
 
 ## Chamber light macro
 
-The K3 Creality light-control path targets Klipper's `nozzle_light` output pin. The WebSocket field is named `lightSw`, but the firmware's Klipper command uses `SET_PIN PIN=nozzle_light`. A custom pin named `chamber_led` does not satisfy that lookup. The helper does not add a Fluidd JavaScript card and does not use the Creality screen WebSocket.
+The Fluidd macros use Klipper's `nozzle_light` output pin. This lets Fluidd control the light through `SET_PIN PIN=nozzle_light`. A custom pin named `chamber_led` does not satisfy that lookup. These macros do not use the Creality screen WebSocket.
+
+The Creality screen WebSocket accepts `{"method":"set","params":{"lightSw":1}}` and logs the requested light state, but that alone does not confirm hardware control. In testing, the WebSocket log changed to `lightSw = 1` while Moonraker still reported `nozzle_light = 0.0` and the lamp stayed off. Treat WebSocket-to-light actuation as unresolved; use the Fluidd macros until the firmware path to GPIO is confirmed.
 
 In the helper menu, choose **27 — Chamber LED On/Off macros for Fluidd**. The helper backs up `printer.cfg`, writes a separate `chamber_light.cfg`, includes it, restarts Klipper, and verifies that both macros loaded. Fluidd displays `CHAMBER_LED_ON` and `CHAMBER_LED_OFF` in its existing **Macros** card.
 
