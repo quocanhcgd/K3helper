@@ -15,20 +15,19 @@ from typing import Optional
 
 INCLUDE_MARKER = "# K3 Helper Script: chamber light macro"
 INCLUDE_LINE = "[include chamber_light.cfg]"
-MACRO_MARKER = "# K3HELPER_CHAMBER_LIGHT_V2"
-LEGACY_MACRO_MARKER = "# K3HELPER_CHAMBER_LIGHT_V1"
-PIN_CONFIG = '''[output_pin nozzle_light]
-pin: rpi:gpio42
-value: 0
-shutdown_value: 0
-'''
+MACRO_MARKER = "# K3HELPER_CHAMBER_LIGHT_V3"
+LEGACY_MACRO_MARKERS = (
+    "# K3HELPER_CHAMBER_LIGHT_V1",
+    "# K3HELPER_CHAMBER_LIGHT_V2",
+)
+CONFLICTING_OUTPUTS = ("output_pin nozzle_light", "output_pin chamber_led")
 MACROS_CONFIG = '''[gcode_macro CHAMBER_LED_ON]
 gcode:
-  SET_PIN PIN=nozzle_light VALUE=1
+  {action_call_remote_method("k3helper_chamber_light", state=1)}
 
 [gcode_macro CHAMBER_LED_OFF]
 gcode:
-  SET_PIN PIN=nozzle_light VALUE=0
+  {action_call_remote_method("k3helper_chamber_light", state=0)}
 '''
 
 
@@ -83,32 +82,45 @@ def manage_config(path: Path, action: str, objects: Optional[set[str]] = None) -
     managed_include = INCLUDE_MARKER + "\n" + INCLUDE_LINE
     already_included = managed_include in normalized
     macro_text = macro_path.read_text(encoding="utf-8") if macro_path.is_file() else ""
-    macro_is_owned = MACRO_MARKER in macro_text or LEGACY_MACRO_MARKER in macro_text
+    macro_is_owned = MACRO_MARKER in macro_text or any(
+        marker in macro_text for marker in LEGACY_MACRO_MARKERS
+    )
     macro_is_current = MACRO_MARKER in macro_text
 
     if action == "install":
-        if already_included and macro_is_current:
-            return False
-        if already_included and LEGACY_MACRO_MARKER in macro_text:
-            raise RuntimeError(
-                "The installed Helper macro targets chamber_led. Remove it, then install again to switch to nozzle_light."
+        if already_included and macro_is_owned:
+            objects = moonraker_objects() if objects is None else objects
+            conflicting_objects = set(CONFLICTING_OUTPUTS).intersection(objects)
+            managed_pin = any(
+                "[" + name + "]" in macro_text for name in CONFLICTING_OUTPUTS
             )
+            if conflicting_objects and not managed_pin:
+                raise RuntimeError(
+                    "Klipper has a separate light output pin which conflicts with the Creality WebSocket. "
+                    "Disable that pin section before installing WebSocket macros."
+                )
+            if macro_is_current:
+                return False
+            backup_config(path)
+            atomic_write(
+                macro_path,
+                (MACRO_MARKER + "\n" + MACROS_CONFIG).replace("\n", newline),
+                0o644,
+            )
+            return True
         if INCLUDE_LINE in normalized or macro_path.exists():
             raise RuntimeError("chamber_light.cfg or its include already exists and is not Helper Script-owned.")
         objects = moonraker_objects() if objects is None else objects
-        if "output_pin chamber_led" in objects and "output_pin nozzle_light" not in objects:
+        if set(CONFLICTING_OUTPUTS).intersection(objects):
             raise RuntimeError(
-                "Klipper has output_pin chamber_led, but the Creality light control targets nozzle_light. "
-                "Rename the existing pin to nozzle_light before installing the macros."
+                "Klipper has a light output pin which conflicts with the Creality WebSocket on GPIO42. "
+                "Disable that pin section before installing WebSocket macros."
             )
         if "gcode_macro CHAMBER_LED_ON" in objects or "gcode_macro CHAMBER_LED_OFF" in objects:
             raise RuntimeError("A CHAMBER_LED_ON or CHAMBER_LED_OFF macro already exists; left existing macros unchanged.")
         backup_config(path)
-        config = MACRO_MARKER + "\n"
-        if "output_pin nozzle_light" not in objects:
-            config += PIN_CONFIG + "\n"
-        config += MACROS_CONFIG
-        macro_path.write_text(config.replace("\n", newline), encoding="utf-8", newline="")
+        config = MACRO_MARKER + "\n" + MACROS_CONFIG
+        atomic_write(macro_path, config.replace("\n", newline), 0o644)
         save_config = re.search(r"(?m)^#\*# <[- ]*SAVE_CONFIG[- ]*>[^\n]*(?:\n|$)", normalized)
         if save_config:
             insertion = save_config.start()
@@ -121,7 +133,7 @@ def manage_config(path: Path, action: str, objects: Optional[set[str]] = None) -
         try:
             atomic_write(path, normalized.replace("\n", newline), path.stat().st_mode & 0o777)
         except Exception:
-            macro_path.unlink(missing_ok=True)
+            macro_path.unlink()
             raise
         return True
 

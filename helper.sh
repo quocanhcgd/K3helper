@@ -69,7 +69,7 @@ main_menu() {
         echo -e "  ${WHITE}[Fluidd integrations]${NC}"
         echo "   25) Connect Fluidd to Spoolman"
         echo "   26) Diagnose Spoolman integration"
-        echo "   27) Chamber LED On/Off macros for Fluidd"
+        echo "   27) Chamber LED WebSocket macros for Fluidd"
         echo ""
         echo -e "  ${WHITE}[Backup & Restore] Menu${NC}"
         echo "   17) Backup Klipper configuration"

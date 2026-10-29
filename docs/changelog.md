@@ -4,9 +4,9 @@
 
 ### Added
 - Documented the K3 Fluidd compatibility integrations and repair workflow.
-- Added a Helper Script option to install or remove Klipper `CHAMBER_LED_ON` and `CHAMBER_LED_OFF` macros in Fluidd's native Macros card. It uses the `nozzle_light` output pin and does not inject a separate UI card or use the Creality WebSocket.
-- Use the K3 firmware's `nozzle_light` pin name for Klipper LED commands; reject a conflicting standalone `chamber_led` pin configuration.
-- Clarified that the Creality `lightSw` WebSocket updates reported state but has not been verified to actuate the lamp; Fluidd macros remain the confirmed control path.
+- Added Helper-managed Fluidd chamber-light macros that relay through Moonraker to Creality's local `lightSw` WebSocket, avoiding a Klipper GPIO claim that prevents the stock WebSocket from actuating the lamp.
+- Migrates Helper-managed v1/v2 direct-pin macros to the WebSocket bridge and rejects separately configured light output pins that still conflict with the stock control path.
+- Verified on K3 that Fluidd's `CHAMBER_LED_ON` and `CHAMBER_LED_OFF` macros change the physical lamp through the Moonraker WebSocket bridge.
 
 ## K3 CFS Slot Mapping Research — October 27, 2026
 
