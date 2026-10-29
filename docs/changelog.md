@@ -1,5 +1,11 @@
 # Changelog
 
+## K3 Fluidd and Chamber Light — October 29, 2026
+
+### Added
+- Documented the K3 Fluidd compatibility integrations and repair workflow.
+- Added a Helper Script option to install or remove Klipper `CHAMBER_LED_ON` and `CHAMBER_LED_OFF` macros in Fluidd's native Macros card. It uses the `chamber_led` output pin and does not inject a separate UI card or use the Creality WebSocket.
+
 ## K3 CFS Slot Mapping Research — October 27, 2026
 
 ### Documented

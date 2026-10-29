@@ -100,6 +100,7 @@ nav:
           - Install Menu: helper-script/install-menu/index.md
           - Moonraker Extensions: helper-script/moonraker-k2plus.md
           - Fluidd (update / repair): helper-script/fluidd-k2plus.md
+          - Fluidd on K3: helper-script/fluidd-k3.md
           - Mainsail: helper-script/mainsail-k2plus.md
           - Fans Control Macros: helper-script/fans-control-macros-k2plus.md
           - Useful Macros: helper-script/useful-macros-k2plus.md
