@@ -8,6 +8,7 @@ The stock Moonraker webcam API omits Fluidd's `enabled` and `uid` fields, and it
 
 - Creality K3 board `CR0CUF039C13` with rooted SSH access.
 - The K3 firmware overlay enabled and mounted on `/etc`.
+- Printer storage mounted at `/mnt/UDISK`.
 - Network access to GitHub for downloading go2rtc.
 
 The firmware overlay is currently off by default. This firmware creates a 512 MiB ext4 overlay image on the SD card. Enable it and reboot:
@@ -35,9 +36,9 @@ Select **11) K3 Camera (install/repair)**. The same menu option installs the fea
 
 To update the Helper Script code on the printer, select **15) Update Helper Script from GitHub**. Then use **8) Fluidd update/repair** to refresh Fluidd and reapply all K3 compatibility patches.
 
-The installer stores the go2rtc binary, config, printer IP, and watchdog on UDISK. Its `procd` service is installed into the writable overlay and enabled at boot. The watchdog restores the Moonraker camera entry if an update removes it, while leaving an existing entry's enabled state alone. The camera appears in Fluidd as **K3 Camera**. go2rtc listens on port `1984`.
+The installer stores the go2rtc binary, config, printer IP, and watchdog on UDISK. Its `procd` service is installed into the writable overlay and enabled at boot. The watchdog restores the Moonraker camera entry if an update removes it and refreshes its stream URLs if the printer IP changes, while leaving an existing entry's enabled state alone. It checks stream health only while a viewer is connected and restarts go2rtc if an active stream stalls for about 30 seconds; restarts are limited to one per minute. On older Moonraker builds that omit webcam UIDs, it replaces only the helper-managed **K3 Camera** entry by name. The camera appears in Fluidd as **K3 Camera**. go2rtc listens on port `1984`.
 
-After a firmware update, update the Helper Script with option **15**, run **8) Fluidd update/repair** to install the current Fluidd release and compatibility layer, then run **11) K3 Camera (install/repair)** to refresh the go2rtc service and stream config. Camera repair preserves the existing writable Fluidd copy. It only creates the Moonraker camera entry if it is missing.
+After a firmware update, update the Helper Script with option **15**, run **8) Fluidd update/repair** to install the current Fluidd release and compatibility layer, then run **11) K3 Camera (install/repair)** to refresh the go2rtc service, stream config, and Moonraker camera URLs. Camera repair preserves the existing writable Fluidd copy and updates the camera URL when the printer receives a different LAN IP.
 
 The CFS panel appears in the lower-right corner of Fluidd. It shows four slot cards for each reported CFS unit, color, material name/type, loaded state when reported by the firmware, temperature, humidity, and a detail view when a slot is selected. It refreshes every 10 seconds from `/printer/objects/query?box` and has a manual **Refresh** button; it does not use Creality Cloud. K3 firmware reports some material names through `box.same_material`, so the panel combines that data with the per-slot arrays and handles the firmware's `vender` spelling. If firmware omits a field, that value is shown as unavailable rather than inferred. The panel is read-only; it does not call the unverified `:9999` WebSocket or send feed/retract commands, and print/reprint slot selection remains controlled by Creality's print workflow.
 
