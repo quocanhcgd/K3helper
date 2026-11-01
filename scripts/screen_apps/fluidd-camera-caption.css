@@ -1,0 +1,5 @@
+/* k3-screen-apps-camera-caption-v1 */
+iframe.camera-image[src*="/screen/"] + .camera-name {
+    display: none !important;
+    pointer-events: none !important;
+}

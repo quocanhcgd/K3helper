@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>K3 Screen</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #111; }
+    body { display: grid; place-items: center; }
+    canvas { width: min(100vw, 166.6667vh); height: min(100vh, 60vw); image-rendering: auto; cursor: none; touch-action: none; }
+    #cursor {
+      position: fixed; width: 24px; height: 24px; border: 2px solid #00e676;
+      border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;
+      z-index: 2; display: none; box-shadow: 0 0 0 2px #101010;
+    }
+    #cursor::before, #cursor::after { content: ""; position: absolute; background: #00e676; }
+    #cursor::before { width: 34px; height: 2px; left: -7px; top: 9px; }
+    #cursor::after { width: 2px; height: 34px; left: 9px; top: -7px; }
+    .tap-ring {
+      position: fixed; width: 38px; height: 38px; border: 3px solid #ffeb3b;
+      border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none;
+      z-index: 3; animation: fade 1s ease-out forwards;
+    }
+    @keyframes fade { to { opacity: 0; scale: 1.8; } }
+  </style>
+</head>
+<body>
+  <canvas id="screen" width="800" height="480" aria-label="K3 screen preview"></canvas>
+  <div id="cursor" aria-hidden="true"></div>
+  <script>
+    const canvas = document.getElementById('screen');
+    const context = canvas.getContext('2d');
+    const cursor = document.getElementById('cursor');
+    function screenPoint(event) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: Math.max(0, Math.min(799, Math.round((event.clientX - rect.left) * 800 / rect.width))),
+        y: Math.max(0, Math.min(479, Math.round((event.clientY - rect.top) * 480 / rect.height)))
+      };
+    }
+    canvas.addEventListener('pointermove', event => {
+      cursor.style.display = 'block';
+      cursor.style.left = event.clientX + 'px';
+      cursor.style.top = event.clientY + 'px';
+    });
+    canvas.addEventListener('pointerleave', () => { cursor.style.display = 'none'; });
+    function sendTouch(action, point) {
+      fetch('touch?a=' + action + '&x=' + point.x + '&y=' + point.y, { method: 'POST' }).catch(() => {});
+    }
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      canvas.setPointerCapture(event.pointerId);
+      const point = screenPoint(event);
+      const ring = document.createElement('div');
+      ring.className = 'tap-ring';
+      ring.style.left = event.clientX + 'px';
+      ring.style.top = event.clientY + 'px';
+      document.body.appendChild(ring);
+      setTimeout(() => ring.remove(), 1000);
+      sendTouch('down', point);
+    });
+    canvas.addEventListener('pointermove', event => {
+      if (canvas.hasPointerCapture(event.pointerId)) sendTouch('move', screenPoint(event));
+    });
+    function releaseTouch(event) {
+      if (canvas.hasPointerCapture(event.pointerId)) {
+        sendTouch('up', screenPoint(event));
+        canvas.releasePointerCapture(event.pointerId);
+      }
+    }
+    canvas.addEventListener('pointerup', releaseTouch);
+    canvas.addEventListener('pointercancel', releaseTouch);
+    async function refresh() {
+      try {
+        const response = await fetch('snapshot?ts=' + Date.now(), { cache: 'no-store' });
+        const bitmap = await createImageBitmap(await response.blob());
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.translate(0, canvas.height);
+        context.rotate(-Math.PI / 2);
+        context.drawImage(bitmap, 0, 0);
+        bitmap.close();
+      } catch (_) {}
+      setTimeout(refresh, 100);
+    }
+    refresh();
+  </script>
+</body>
+</html>

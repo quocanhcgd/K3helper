@@ -435,7 +435,6 @@ REPRINT_THUMBNAILS_SOURCE = r'''(() => {
 })();
 '''
 
-
 def ensure_custom_ui_directory(config_root: Path) -> None:
     """Prepare Fluidd's documented custom UI directory without overwriting user files."""
     theme_dir = config_root / ".fluidd-theme"
@@ -1193,10 +1192,10 @@ def install(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("install", choices=["install"])
-    parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--destination", type=Path, required=True)
-    parser.add_argument("--nginx", type=Path, required=True)
+    parser.add_argument("command", choices=["install"])
+    parser.add_argument("--source", type=Path)
+    parser.add_argument("--destination", type=Path)
+    parser.add_argument("--nginx", type=Path)
     parser.add_argument(
         "--firmware-version",
         type=Path,
@@ -1210,6 +1209,8 @@ def main() -> int:
     parser.add_argument("--refresh", action="store_true")
     args = parser.parse_args()
     try:
+        if not args.source or not args.destination or not args.nginx:
+            raise RuntimeError("--source, --destination, and --nginx are required for install")
         install(
             args.source,
             args.destination,

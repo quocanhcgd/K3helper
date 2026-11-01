@@ -95,6 +95,7 @@ nav:
       - K3 Firmware Version API: helper-script/k3-firmware-api.md
       - K3 Cloud Connection Trace: helper-script/k3-cloud-trace.md
       - K3 Cloud Region Switch: helper-script/k3-cloud-region.md
+      - SparkX i8 Helper Script: helper-script/i8-compatibility.md
       - Install Helper Script: helper-script/helper-script-installation.md
       - Install Menu:
           - Install Menu: helper-script/install-menu/index.md

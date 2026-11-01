@@ -1,13 +1,14 @@
 #!/bin/sh
 # K3 camera bridge using the firmware's built-in Fluidd go2rtc adapter.
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PACKAGE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+SCRIPT_DIR=/mnt/UDISK/helper-script
 GO2RTC=$SCRIPT_DIR/go2rtc
 GO2RTC_CONFIG=$SCRIPT_DIR/go2rtc-k3.yaml
 PRINTER_IP_FILE=$SCRIPT_DIR/go2rtc-k3.ip
-WATCHDOG_SOURCE=$SCRIPT_DIR/scripts/camera_watchdog.py
+WATCHDOG_SOURCE=$PACKAGE_ROOT/scripts/camera_watchdog.py
 WATCHDOG=$SCRIPT_DIR/camera_watchdog.py
-FLUIDD_COMPAT=$SCRIPT_DIR/scripts/fluidd_k3_compat.py
+FLUIDD_COMPAT=$PACKAGE_ROOT/scripts/fluidd_k3_compat.py
 FLUIDD_SOURCE=/usr/share/fluidd
 FLUIDD_DIR=$SCRIPT_DIR/fluidd
 NGINX_CONF=/etc/nginx/nginx.conf
@@ -50,6 +51,14 @@ require_overlay() {
         echo "The firmware allocates a 512 MiB overlay image on the SD card."
         return 1
     fi
+}
+
+require_storage() {
+    if ! awk '$2 == "/mnt/UDISK" { found=1 } END { exit !found }' /proc/mounts; then
+        log_error "Printer storage at /mnt/UDISK is not mounted."
+        return 1
+    fi
+    mkdir -p "$SCRIPT_DIR" || { log_error "Could not prepare $SCRIPT_DIR."; return 1; }
 }
 
 install_fluidd_compat() {
@@ -129,40 +138,7 @@ EOF
 
 register_camera() {
     printer_ip=$1
-    python3 - "$printer_ip" "$STREAM_NAME" "$CAMERA_NAME" <<'PY'
-import json
-import sys
-import urllib.request
-
-ip, stream, name = sys.argv[1:]
-base = "http://127.0.0.1:7125/server/webcams"
-with urllib.request.urlopen(base + "/list", timeout=5) as response:
-    webcams = json.loads(response.read()).get("result", {}).get("webcams", [])
-if any(camera.get("name") == name for camera in webcams):
-    print("K3 camera is already registered with Moonraker")
-    raise SystemExit(0)
-
-camera = {
-    "name": name,
-    "location": "printer",
-    "service": "webrtc-go2rtc",
-    "target_fps": 15,
-    "stream_url": "http://%s:1984/?src=%s" % (ip, stream),
-    "snapshot_url": "http://%s:1984/api/frame.jpeg?src=%s" % (ip, stream),
-    "flip_horizontal": False,
-    "flip_vertical": False,
-    "rotation": 0,
-}
-request = urllib.request.Request(
-    base + "/item",
-    data=json.dumps(camera).encode(),
-    method="POST",
-    headers={"Content-Type": "application/json"},
-)
-with urllib.request.urlopen(request, timeout=10) as response:
-    response.read()
-print("K3 camera registered with Moonraker")
-PY
+    python3 "$WATCHDOG_SOURCE" --register "$printer_ip"
 }
 
 wait_for_go2rtc() {
@@ -181,6 +157,7 @@ install_camera() {
     require_root || return 1
     require_k3 || return 1
     require_overlay || return 1
+    require_storage || return 1
     [ -f "$WATCHDOG_SOURCE" ] || { log_error "Missing $WATCHDOG_SOURCE"; return 1; }
     install_fluidd_compat || return 1
 
@@ -230,6 +207,7 @@ remove_camera() {
     require_root || return 1
     require_k3 || return 1
     require_overlay || return 1
+    require_storage || return 1
 
     python3 - "$CAMERA_NAME" <<'PY'
 import sys

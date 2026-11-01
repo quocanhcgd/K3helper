@@ -13,16 +13,21 @@ Fluidd update and repair applies the K3-specific compatibility changes:
 - Adds a K3 Moonraker compatibility component for Fluidd's optional peripheral calls and metadata rescan request. Unsupported firmware calls return safe empty results instead of `-32601 Method not found`.
 - Shows read-only CFS slot status on the dashboard. Slot selection for starting a print is not available through a verified K3 Moonraker API.
 - Shows the installed Creality firmware version and preserves Fluidd's custom UI settings directory.
+- The optional **28 — K3 Screen Apps in Fluidd Camera card** integration registers `/screen/` with Moonraker as an HTTP Page (`iframe`) webcam. Fluidd renders it in its existing Camera card and the same-origin proxy carries touch input; no custom dashboard card is added.
 
 The compatibility setup is applied again on every repair. It does not replace printer configuration or Fluidd user settings.
 
 The repair also checks the running Moonraker component list. If `k3helper_compat` is missing, it adds a managed `[k3helper_compat]` section to the active writable Moonraker configuration, restarts Moonraker, and verifies that the component loaded. This removes noisy errors from Fluidd's optional `machine.peripherals.*` and `server.files.metascan` calls while preserving the real K3 camera and file APIs.
+
+The Screen Apps package is based on GPL-3.0-or-later [paxx12/screen-apps](https://github.com/paxx12/screen-apps). Its K3 service requires the `/etc` overlay, `/dev/fb0`, `/dev/input/event0`, Python Pillow, and the tested touch calibration. Choose **Remove → 15 — K3 Screen Apps** to remove its managed Moonraker webcam entry, disable the service, and remove the `/screen/` reverse proxy. The Camera dashboard card itself remains Fluidd's native card.
 
 ## Chamber light macro
 
 Creality controls the chamber light through its local WebSocket at `ws://127.0.0.1:9999/`, using `{"method":"set","params":{"lightSw":1}}` to turn it on and `lightSw: 0` to turn it off. Klipper must not claim GPIO42 through `[output_pin nozzle_light]` or another light `output_pin`: testing showed the WebSocket actuates the physical lamp after that pin is disabled and Klipper is restarted.
 
 In the helper menu, choose **27 — Chamber LED On/Off macros for Fluidd**. The Helper installs a small Moonraker component that receives a remote method from the Klipper macros and relays the state to Creality's local WebSocket. It writes a separate `chamber_light.cfg`, includes it, restarts Moonraker and Klipper, and verifies that the component and both macros loaded. Fluidd displays `CHAMBER_LED_ON` and `CHAMBER_LED_OFF` in its existing **Macros** card. These macros use the same WebSocket as Creality and do not define an output pin.
+
+The client LED bundle includes its installer helpers and does not require the base Helper Script to be installed. It runs from a temporary SSH directory that the client removes after execution. The installer persists only the two Python modules Moonraker needs at startup under `/mnt/UDISK/helper-script/scripts`; its Moonraker and Klipper configuration remains on UDISK and is backed up before changes.
 
 If Klipper currently reports `output_pin nozzle_light` or `output_pin chamber_led`, disable the corresponding section in `printer.cfg` and restart Klipper before installing. The Helper stops if a light output pin is still active. Existing Helper-managed v1/v2 pin macros are upgraded to WebSocket macros when the old pin is managed by that file; the Helper leaves separately configured pins unchanged and reports the conflict.
 
