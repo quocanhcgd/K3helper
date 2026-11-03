@@ -176,6 +176,10 @@ install_screen() {
     python3 "$APP_DIR/moonraker_webcam.py" register || return 1
     nginx -t && /etc/init.d/nginx restart || return 1
     mark_installed
+    python3 "$SCRIPT_DIR/scripts/k3_boot_recovery.py" install || {
+        log_error "K3 boot recovery service could not be enabled."
+        return 1
+    }
     log_success "Screen viewer is integrated at http://<printer-ip>:4408/screen/"
 }
 

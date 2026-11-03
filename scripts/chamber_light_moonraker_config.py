@@ -34,6 +34,10 @@ def update_config(path, action):
         if block_start >= 0 and normalized[block_start:start].strip() == MARKER:
             start = block_start
             owned = True
+        elif _is_legacy_helper_section(normalized[start:end]):
+            # Firmware restores older Helper backups without the ownership
+            # marker. Preserve its known-good endpoint and adopt it safely.
+            owned = True
         if not owned:
             raise ValueError("An unmanaged [%s] section already exists" % SECTION_NAME)
         normalized = normalized[:start] + normalized[end:]
@@ -73,6 +77,15 @@ def main():
         return 1
     print("Moonraker chamber-light section updated.")
     return 0
+
+
+def _is_legacy_helper_section(block: str) -> bool:
+    """Recognize the pre-marker section emitted by this Helper Script."""
+    return bool(
+        re.search(r"(?m)^\s*host\s*[:=]\s*127\.0\.0\.1\s*$", block)
+        and re.search(r"(?m)^\s*port\s*[:=]\s*9999\s*$", block)
+        and "[" + SECTION_NAME + "]" in block
+    )
 
 
 if __name__ == "__main__":

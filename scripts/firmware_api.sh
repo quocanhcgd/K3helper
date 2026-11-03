@@ -86,6 +86,10 @@ PY
     while [ "$attempt" -lt 10 ]; do
         if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/firmware', timeout=2).read()" 2>/dev/null; then
             mark_installed
+            python3 "$SCRIPT_DIR/scripts/k3_boot_recovery.py" install || {
+                log_error "K3 boot recovery service could not be enabled."
+                return 1
+            }
             log_success "Firmware API running at http://<printer-ip>:8765/api/firmware"
             return 0
         fi

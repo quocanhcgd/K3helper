@@ -36,6 +36,18 @@ class ChamberLightMoonrakerConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unmanaged"):
             CONFIG.update_config(self.path, "install")
 
+    def test_adopts_legacy_helper_section_without_marker(self):
+        self.path.write_text(
+            "[server]\nhost: 0.0.0.0\n\n"
+            "[chamber_light_ws]\nhost: 127.0.0.1\nport: 9999\n",
+            encoding="utf-8",
+        )
+        CONFIG.update_config(self.path, "install")
+        content = self.path.read_text(encoding="utf-8")
+        self.assertEqual(content.count("[chamber_light_ws]"), 1)
+        self.assertIn(CONFIG.MARKER, content)
+        self.assertIn("port: 9999", content)
+
 
 if __name__ == "__main__":
     unittest.main()

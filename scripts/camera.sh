@@ -200,6 +200,10 @@ PY
     }
 
     mark_installed
+    python3 "$PACKAGE_ROOT/scripts/k3_boot_recovery.py" install || {
+        log_error "K3 boot recovery service could not be enabled."
+        return 1
+    }
     log_success "K3 camera installed. Fluidd connects directly to go2rtc on port 1984."
 }
 

@@ -13,6 +13,9 @@ install_moonraker_extensions() {
     echo ""
 
     if is_k3; then
+        if [ ! -f "$MOONRAKER_CONF" ] && [ -f "$SCRIPT_DIR/scripts/k3_boot_recovery.py" ]; then
+            python3 "$SCRIPT_DIR/scripts/k3_boot_recovery.py" repair-config || return 1
+        fi
         if [ ! -f "$MOONRAKER_CONF" ] || ! grep -q 'include /usr/share/moonraker/moonraker.conf' "$MOONRAKER_CONF"; then
             log_error "Expected the existing K3 Moonraker wrapper and stock-config include at $MOONRAKER_CONF."
             log_info "No files were changed."
